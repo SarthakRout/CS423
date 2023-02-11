@@ -3,6 +3,7 @@
 #include<string>
 #include<map>
 #include<fstream>
+#include "cache.h"
 
 using namespace std;
 
@@ -15,6 +16,11 @@ struct entry {
 
 int main(){
     cout << "Application to analyse traces\n";
+
+    // Setting up memory and cache layers
+    LRUCache L2(8, 64, 512*1024), L3(16, 64, 2*1024*1024);
+    Memory mem({L2, L3});
+
     map<string, vector<string>> apps = {
         {"bzip2", {"bzip2.log_l1misstrace_0", "bzip2.log_l1misstrace_1"}}, 
         {"gcc", {"gcc.log_l1misstrace_0", "gcc.log_l1misstrace_1"}}, 
@@ -33,14 +39,14 @@ int main(){
             file.open(BASE_PATH + path, ios::in|ios::binary);
             if(file){
                 while(file.read((char * )&temp, sizeof(temp))){
-                    counter++;
+                    if(temp.type){
+                        mem.handlePkt(temp.addr);
+                    }
                 }
                 file.close();
-            }
-            
+            }   
         }
-        cout << "Number of entries: " << counter << "\n";
-        
+        mem.printStats();        
     }
     return 0;
 }
