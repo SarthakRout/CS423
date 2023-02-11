@@ -19,7 +19,7 @@ int main(){
 
     // Setting up memory and cache layers
     LRUCache L2(8, 64, 512*1024), L3(16, 64, 2*1024*1024);
-    Memory mem({L2, L3});
+    Memory mem({L2, L3}, INCLUSIVE_POLICY);
 
     map<string, vector<string>> apps = {
         {"bzip2", {"bzip2.log_l1misstrace_0", "bzip2.log_l1misstrace_1"}}, 
