@@ -20,8 +20,10 @@ class LRUCache {
         int ways;
         int index;
         int block_size;
+        int misses;
     public:
         LRUCache(int ways, int block_size, int sz);
+        void printStats() const;
 };
 
 
