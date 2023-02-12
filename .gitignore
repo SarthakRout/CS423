@@ -1,3 +1,7 @@
 *.zip
 A1/traces/**
 analyse
+*.txt
+!A1.txt
+test.c
+a.out

@@ -16,7 +16,7 @@ struct entry {
 
 int main(){
     cout << "Application to analyse traces\n";
-    int policy = NINE_POLICY;
+    int policy = INCLUSIVE_POLICY;
     // Setting up memory and cache layers
     LRUCache L2(8, 64, 512*1024), L3(16, 64, 2*1024*1024);
     Memory mem({L2, L3}, policy);
@@ -39,14 +39,19 @@ int main(){
             struct entry temp;
             file.open(BASE_PATH + path, ios::in|ios::binary);
             if(file){
-                while(file.read((char * )&temp, sizeof(temp))){
+                while(file.read((char *)&temp.i_or_d, sizeof(char))){
+                    file.read((char *)&temp.type, sizeof(char));
+                    file.read((char *)&temp.addr, sizeof(unsigned long long));
+                    file.read((char *)&temp.pc, sizeof(unsigned));
                     if(temp.type){
                         mem.handlePkt(temp.addr);
+                        counter++;
                     }
                 }
                 file.close();
             }   
         }
+        cout << "Count: " << counter << "\n";
         mem.printStats();        
     }
     return 0;
