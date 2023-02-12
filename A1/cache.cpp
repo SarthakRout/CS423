@@ -45,7 +45,6 @@ inline unsigned long long LRUCache::getAddr(unsigned long long tag, int indexBit
 bool LRUCache::search(unsigned long long addr) {
     unsigned long long block_addr = getBlockAddr(addr);
     int indexBits = block_addr & X_MASK(this->index);
-    // std::cout << block_addr << " :  " << indexBits <<  " : " << X_MASK(this->index) << "\n";
     for(auto& block: this->cache[indexBits]){
         if(block.second.valid && block.second.tag == getTag(block_addr)){
             this->hits++;
@@ -198,7 +197,9 @@ void Memory::printStats(){
     int layer_id = 2;
     for(const auto& cache: this->cache_layers){
         std::cout << "Layer " << layer_id << " Hits and Misses:\n";
-        std::cout << cache.getHits() << "\t\t" <<cache.getMisses() << "\n";
+        long long hits = cache.getHits(), misses = cache.getMisses();
+        long long per = 100.0 * hits / ( hits + misses);
+        std::cout << hits << "(" << (per) << "%)" << "\t" << misses << "(" << (100 - (per))<< "%)" << "\n";
         layer_id++;
     }
 }
