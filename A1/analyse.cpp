@@ -16,10 +16,10 @@ struct entry {
 
 int main(){
     cout << "Application to analyse traces\n";
-
+    int policy = NINE_POLICY;
     // Setting up memory and cache layers
     LRUCache L2(8, 64, 512*1024), L3(16, 64, 2*1024*1024);
-    Memory mem({L2, L3}, INCLUSIVE_POLICY);
+    Memory mem({L2, L3}, policy);
 
     map<string, vector<string>> apps = {
         {"bzip2", {"bzip2.log_l1misstrace_0", "bzip2.log_l1misstrace_1"}}, 
@@ -27,10 +27,11 @@ int main(){
         {"gromacs", {"gromacs.log_l1misstrace_0"}}, 
         {"h264ref", {"h264ref.log_l1misstrace_0"}}, 
         {"hmmer", {"hmmer.log_l1misstrace_0"}}, 
-        {"sphinx3", {"bzip2.log_l1misstrace_0", "bzip2.log_l1misstrace_1"}}
+        {"sphinx3", {"sphinx3.log_l1misstrace_0", "sphinx3.log_l1misstrace_1"}}
     };
     string BASE_PATH = "./traces/";
     for(auto app: apps){
+        mem.reset(policy);
         cout << "Analysing trace for " << app.first << "\n";
         int counter = 0;
         for(auto path: app.second){

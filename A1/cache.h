@@ -10,12 +10,12 @@
 #define NINE_POLICY         1
 #define EXCLUSIVE_POLICY    2
 
-class block {
+class Block {
     public:
     unsigned long long tag;
     int valid;
-    block(unsigned long long tag, int valid) : tag(tag), valid(valid) {}
-    bool operator<(const block& rhs) const{
+    Block(unsigned long long tag, int valid) : tag(tag), valid(valid) {}
+    bool operator<(const Block& rhs) const{
         return this->tag < rhs.tag;
     }
 };
@@ -25,11 +25,13 @@ class Memory;
 class LRUCache {
     private:
         int ways;
-        int index;
+        unsigned long long index;
         int offset;
-        std::vector<std::multiset<std::pair<int, block>>> cache;
+        std::vector<std::multiset<std::pair<int, Block>>> cache;
         Memory* mem;
         int misses;
+        int hits;
+        void initialise();
 
     public:
         LRUCache(int ways, int block_size, int sz);
@@ -40,9 +42,9 @@ class LRUCache {
         unsigned long long insert(unsigned long long addr, bool& evicted);
         void invalidate(unsigned long long addr);
         int getMisses() const;
+        int getHits() const;
         void setMem(Memory* mem);
-
-
+        void reset();
 };
 
 
@@ -62,6 +64,7 @@ class Memory {
         // Takes address which is to be loaded and returns the block 
         // which contains the address (block address is returned)
         void handlePkt(unsigned long long addr);
+        void reset(int policy_id);
         void printStats();
 };
 

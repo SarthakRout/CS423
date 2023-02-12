@@ -2,7 +2,7 @@
 #include <cassert>
 #include <iostream>
 
-#define X_MASK(p) ((1<<(p)) - 1)
+#define X_MASK(p) (unsigned long long)((1<<(p)) - 1)
 
 
 // LRUCache
@@ -13,13 +13,18 @@ LRUCache::LRUCache(int ways, int block_size, int sz){
     assert(sets >= 1);
     this->index = ceil(log2(sets));
     this->misses = 0;
-
+    this->hits = 0;
     this->mem = nullptr;
 
-    for(int i = 0; i<(1<<index); i++){
-        std::multiset<std::pair<int, block>> temp;
-        for(int j = 0; j<ways; j++){
-            temp.insert({INT32_MAX, {0ULL, 0}});
+    this->initialise();
+}
+
+void LRUCache::initialise(){
+    this->cache.clear();
+    for(int i = 0; i<(1<<(this->index)); i++){
+        std::multiset<std::pair<int, Block>> temp;
+        for(int j = 0; j<this->ways; j++){
+            temp.insert({0, {0ULL, 0}});
         }
         this->cache.push_back(temp);
     }
@@ -40,8 +45,12 @@ inline unsigned long long LRUCache::getAddr(unsigned long long tag, int indexBit
 bool LRUCache::search(unsigned long long addr) {
     unsigned long long block_addr = getBlockAddr(addr);
     int indexBits = block_addr & X_MASK(this->index);
-    for(const auto& block: this->cache[indexBits]){
+    // std::cout << block_addr << " :  " << indexBits <<  " : " << X_MASK(this->index) << "\n";
+    for(auto& block: this->cache[indexBits]){
         if(block.second.valid && block.second.tag == getTag(block_addr)){
+            this->hits++;
+            this->cache[indexBits].erase(this->cache[indexBits].lower_bound(block));
+            this->cache[indexBits].insert({this->mem->timer, {this->getTag(block_addr), 1}});
             // Hits in this layer of cache
             return true;
         }
@@ -57,17 +66,17 @@ unsigned long long LRUCache::insert(unsigned long long addr, bool& evicted){
     int indexBits = block_addr & X_MASK(this->index);
 
     // Pointer to last block in set which will be invalid or LRU replacement victim
-    auto entry = this->cache[indexBits].rbegin();
-    if(entry->second.valid == false){
+    auto block = this->cache[indexBits].begin();
+    if(block->second.valid == false){
         evicted = false;
-        this->cache[indexBits].erase(this->cache[indexBits].lower_bound(*entry));
+        this->cache[indexBits].erase(this->cache[indexBits].lower_bound(*block));
         this->cache[indexBits].insert({this->mem->timer, {this->getTag(block_addr), 1}});
     }
     else{
         // Evicting this block
         evicted = true;
-        victim = this->getAddr(entry->second.tag, indexBits);
-        this->cache[indexBits].erase(this->cache[indexBits].lower_bound(*entry));
+        victim = this->getAddr(block->second.tag, indexBits);
+        this->cache[indexBits].erase(this->cache[indexBits].lower_bound(*block));
         this->cache[indexBits].insert({this->mem->timer, {this->getTag(block_addr), 1}});
     }
     return victim;
@@ -78,10 +87,10 @@ void LRUCache::invalidate(unsigned long long addr){
     unsigned long long block_addr = getBlockAddr(addr);
     int indexBits = block_addr & X_MASK(this->index);
     auto tag = getTag(block_addr);
-    for(auto entry: this->cache[indexBits]){
-        if(entry.second.tag == tag && entry.second.valid){
-            this->cache[indexBits].erase(this->cache[indexBits].lower_bound(entry));
-            this->cache[indexBits].insert({INT32_MAX, {0ULL, 0}});
+    for(auto block: this->cache[indexBits]){
+        if(block.second.tag == tag && block.second.valid){
+            this->cache[indexBits].erase(this->cache[indexBits].lower_bound(block));
+            this->cache[indexBits].insert({0, {0ULL, 0}});
             break;
         }
     }
@@ -93,6 +102,16 @@ void LRUCache::setMem(Memory* ptr){
 
 int LRUCache::getMisses() const{
     return this->misses;
+}
+
+int LRUCache::getHits() const{
+    return this->hits;
+}
+
+void LRUCache::reset(){
+    this->misses = 0;
+    this->hits = 0;
+    this->initialise();
 }
 
 // Memory
@@ -144,10 +163,8 @@ void Memory::implInclusivePolicy(unsigned long long addr, int hit_layer){
         bool evicted;
         unsigned long long victim = this->cache_layers[j].insert(addr, evicted);
         if(evicted){
-            if(policy_id == INCLUSIVE_POLICY){
-                for(int k = j-1; k>=0; k--){
-                    this->cache_layers[k].invalidate(victim);
-                }
+            for(int k = j-1; k>=0; k--){
+                this->cache_layers[k].invalidate(victim);
             }
         }
     }
@@ -162,7 +179,9 @@ void Memory::implNINEPolicy(unsigned long long addr, int hit_layer){
 
 void Memory::implExclusivePolicy(unsigned long long addr, int hit_layer){
     if(hit_layer != 0){
-        this->cache_layers[hit_layer].invalidate(addr);
+        if(hit_layer < this->cache_layers.size()){
+            this->cache_layers[hit_layer].invalidate(addr);
+        }
         bool evicted;
         unsigned long long victim = this->cache_layers[0].insert(addr, evicted);
         int j = 1;
@@ -178,8 +197,16 @@ void Memory::printStats(){
     std::cout << "Printing Statistics\n";
     int layer_id = 2;
     for(const auto& cache: this->cache_layers){
-        std::cout << "Layer " << layer_id << " Misses:\n";
-        std::cout << cache.getMisses() << "\n";
+        std::cout << "Layer " << layer_id << " Hits and Misses:\n";
+        std::cout << cache.getHits() << "\t\t" <<cache.getMisses() << "\n";
         layer_id++;
     }
+}
+
+void Memory::reset(int policy_id){
+    this->policy_id = policy_id;
+    for(auto& cache: this->cache_layers){
+        cache.reset();
+    }
+    this->timer = 0;
 }
