@@ -6,7 +6,7 @@
 
 
 // LRUCache
-LRUCache::LRUCache(int ways, int block_size, int sz){
+LRUCache::LRUCache(int ways, int block_size, int sz, int flag){
     this->ways = ways;
     this->offset = ceil(log2(block_size));
     int sets =  sz / ( ways * block_size);
@@ -15,16 +15,19 @@ LRUCache::LRUCache(int ways, int block_size, int sz){
     this->misses = 0;
     this->hits = 0;
     this->mem = nullptr;
-
+    this->solvep2 = flag;
     this->initialise();
 }
 
 void LRUCache::initialise(){
     this->cache.clear();
+    this->coldctr.clear();
+    this->fullAssoc.clear();
+    this->history.clear();
     for(int i = 0; i<(1<<(this->index)); i++){
         std::multiset<std::pair<int, Block>> temp;
         for(int j = 0; j<this->ways; j++){
-            temp.insert({0, {0ULL, 0}});
+            temp.insert({INT32_MIN,{0ULL, 0}});
         }
         this->cache.push_back(temp);
     }
@@ -44,12 +47,31 @@ inline unsigned long long LRUCache::getAddr(unsigned long long tag, int indexBit
 
 bool LRUCache::search(unsigned long long addr) {
     unsigned long long block_addr = getBlockAddr(addr);
+    if(this->solvep2 == 1){
+        this->coldctr.insert(block_addr);
+    }
     int indexBits = block_addr & X_MASK(this->index);
+    unsigned long long tag = this->getTag(block_addr);
+    if(this->solvep2 == 2){
+        this->history.push_back(addr);
+        if(this->fullAssoc.count(tag) && this->fullAssoc[tag].second.valid){
+            this->hits++;
+            this->cache[indexBits].erase(this->cache[indexBits].lower_bound(this->fullAssoc[tag]));
+            this->fullAssoc.erase(tag);
+            this->cache[indexBits].insert({this->mem->timer, {tag, 1}});
+            this->fullAssoc[tag] = {this->mem->timer, {tag, 1}};
+            return true;
+        }
+        else{
+            this->misses++;
+            return false;
+        }
+    }
     for(auto& block: this->cache[indexBits]){
-        if(block.second.valid && block.second.tag == getTag(block_addr)){
+        if(block.second.valid && block.second.tag == tag){
             this->hits++;
             this->cache[indexBits].erase(this->cache[indexBits].lower_bound(block));
-            this->cache[indexBits].insert({this->mem->timer, {this->getTag(block_addr), 1}});
+            this->cache[indexBits].insert({this->mem->timer, {tag, 1}});
             // Hits in this layer of cache
             return true;
         }
@@ -70,10 +92,17 @@ unsigned long long LRUCache::insert(unsigned long long addr, bool& evicted){
         evicted = false;
         this->cache[indexBits].erase(this->cache[indexBits].lower_bound(*block));
         this->cache[indexBits].insert({this->mem->timer, {this->getTag(block_addr), 1}});
+        if(solvep2 == 2){
+            this->fullAssoc[this->getTag(block_addr)] = std::make_pair(this->mem->timer, Block(this->getTag(block_addr), 1)); 
+        }
     }
     else{
         // Evicting this block
         evicted = true;
+        if(solvep2 == 2){
+            this->fullAssoc.erase(block->second.tag);
+            this->fullAssoc[this->getTag(block_addr)] = std::make_pair(this->mem->timer, Block(this->getTag(block_addr), 1)); 
+        }
         victim = this->getAddr(block->second.tag, indexBits);
         this->cache[indexBits].erase(this->cache[indexBits].lower_bound(*block));
         this->cache[indexBits].insert({this->mem->timer, {this->getTag(block_addr), 1}});
@@ -86,10 +115,18 @@ void LRUCache::invalidate(unsigned long long addr){
     unsigned long long block_addr = getBlockAddr(addr);
     int indexBits = block_addr & X_MASK(this->index);
     auto tag = getTag(block_addr);
+    if(solvep2 == 2){
+        if(this->fullAssoc.count(tag) && this->fullAssoc[tag].second.valid){
+            this->cache[indexBits].erase(this->cache[indexBits].lower_bound(this->fullAssoc[tag]));
+            this->fullAssoc.erase(tag);
+            this->cache[indexBits].insert({INT32_MIN,{0ULL, 0}});
+        }
+        return;
+    }
     for(auto block: this->cache[indexBits]){
         if(block.second.tag == tag && block.second.valid){
             this->cache[indexBits].erase(this->cache[indexBits].lower_bound(block));
-            this->cache[indexBits].insert({0, {0ULL, 0}});
+            this->cache[indexBits].insert({INT32_MIN,{0ULL, 0}});
             break;
         }
     }
@@ -99,13 +136,70 @@ void LRUCache::setMem(Memory* ptr){
     this->mem = ptr;
 }
 
-int LRUCache::getMisses() const{
-    return this->misses;
+std::pair<unsigned long long, unsigned long long> LRUCache::getStats() const {
+    
+    if(solvep2 == 0){
+        return {this->hits, this->misses};
+    }
+    else if(solvep2 == 1){
+        // Returning cold misses
+        return {this->hits, this->coldctr.size()};
+    }
+    else if(solvep2 == 2){
+        return {this->hits, this->misses};
+    }
+    return {0, 0};
 }
 
-int LRUCache::getHits() const{
-    return this->hits;
+unsigned long long LRUCache::getBeladyMisses(){
+    int ways = this->ways;
+    int i = 0;
+    std::unordered_map<unsigned long long, std::queue<int>> trace;
+    for(const auto& addr: this->history){
+        unsigned long long block_addr = addr / 64;
+        trace[block_addr].push(i);
+        i++;
+    }    
+    for(auto& p: trace){
+        trace[p.first].push(INT32_MAX);
+    }
+    std::set<std::pair<long long, unsigned long long>> beladyCache;
+    std::map<unsigned long long, int> fullAssocMap;
+    unsigned long long misses = 0;
+    for(const auto& addr: this->history){
+        unsigned long long block_addr = addr / 64;
+        auto cur = trace[block_addr].front();
+        trace[block_addr].pop();
+        auto next = trace[block_addr].front();
+        assert(beladyCache.size() <= ways);
+        if(fullAssocMap.count(block_addr)){
+            assert(fullAssocMap[block_addr] == cur);
+            auto ptr = beladyCache.find({-fullAssocMap[block_addr], block_addr});
+            beladyCache.erase(ptr);
+            beladyCache.insert({-next, block_addr});
+            fullAssocMap[block_addr] = next;
+        }
+        else{
+            misses++;
+            if(beladyCache.size() < ways){
+                // Invalid ways present
+                beladyCache.insert({-next, block_addr});
+                fullAssocMap[block_addr] = next;
+
+            }
+            else{
+                // Evict some block
+                auto ptr = beladyCache.begin();
+                fullAssocMap.erase(ptr->second);
+                beladyCache.erase(ptr);
+                beladyCache.insert({-next, block_addr});
+                fullAssocMap[block_addr] = next;
+            }
+        }
+    }  
+    return misses;
 }
+
 
 void LRUCache::reset(){
     this->misses = 0;
@@ -124,7 +218,6 @@ Memory::Memory(std::vector<LRUCache> v, int policy_id){
 }
 
 void Memory::handlePkt(unsigned long long addr){
-    this->timer++;
     int i = 0;
     for(i = 0; i<this->cache_layers.size(); i++){
         if(this->cache_layers[i].search(addr)){
@@ -153,12 +246,12 @@ void Memory::handlePkt(unsigned long long addr){
             exit(0);
 
     }
-
+    this->timer++;
 }
 
 void Memory::implInclusivePolicy(unsigned long long addr, int hit_layer){
     
-    for(int j = hit_layer  - 1; j>=0; j--){
+    for(int j = hit_layer - 1; j>=0; j--){
         bool evicted;
         unsigned long long victim = this->cache_layers[j].insert(addr, evicted);
         if(evicted){
@@ -192,16 +285,17 @@ void Memory::implExclusivePolicy(unsigned long long addr, int hit_layer){
 }
 
 
-void Memory::printStats(){
-    std::cout << "Printing Statistics\n";
-    int layer_id = 2;
+std::vector<std::pair<unsigned long long, unsigned long long>> Memory::getStats(){
+    std::vector<std::pair<unsigned long long, unsigned long long>> v;
     for(const auto& cache: this->cache_layers){
-        std::cout << "Layer " << layer_id << " Hits and Misses:\n";
-        long long hits = cache.getHits(), misses = cache.getMisses();
-        long long per = 100.0 * hits / ( hits + misses);
-        std::cout << hits << "(" << (per) << "%)" << "\t" << misses << "(" << (100 - (per))<< "%)" << "\n";
-        layer_id++;
+        v.push_back(cache.getStats());
     }
+    return v;
+}
+
+
+unsigned long long Memory::getBeladyMisses(){
+    return this->cache_layers[1].getBeladyMisses();
 }
 
 void Memory::reset(int policy_id){
@@ -211,3 +305,4 @@ void Memory::reset(int policy_id){
     }
     this->timer = 0;
 }
+

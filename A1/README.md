@@ -1,6 +1,6 @@
 # A1
 
-1. Unzip the traces file in the folde where the source code is located
+1. Unzip the traces file in the folder where the source code is located
     
     ```
     Struture:
@@ -9,6 +9,11 @@
     |--analyse.cpp
     |--cache.cpp
     |--cache.h
+    |--results
+            |--inclusive.txt
+            |--nine.txt
+            |--exclusive.txt
+            |--2.txt
     |--traces
             |--bzip2.log_l1misstrace_0
             |--..
@@ -19,8 +24,9 @@
 g++ -o analyse analyse.cpp cache.cpp cache.h 
 ```
 3. To run the executable for problem 1, pass either 'i' for Inclusive Policy, 'n' for Not-Inclusive-Not-Exclusive Policy, 'e' for Exclusive Policy to the executable. It will use this policy and process all trace files.
+For example, for using inclusive policy,
 ```bash
-./analyse 'i'
+./analyse i
 ```
 4. It outputs the Hits and Misses for both layers of cache for each of the six applications.
 ```
@@ -38,44 +44,9 @@ Layer 3 Hits and Misses:
 Analysing trace for gcc
 Count: 14610809
 Printing Statistics
-Layer 2 Hits and Misses:
-11574348(79%)	3036461(21%)
-Layer 3 Hits and Misses:
-1663059(54%)	1373402(46%)
-
-Analysing trace for gromacs
-Count: 3431511
-Printing Statistics
-Layer 2 Hits and Misses:
-3094660(90%)	336851(10%)
-Layer 3 Hits and Misses:
-166320(49%)	170531(51%)
-
-Analysing trace for h264ref
-Count: 2348572
-Printing Statistics
-Layer 2 Hits and Misses:
-1378894(58%)	969678(42%)
-Layer 3 Hits and Misses:
-627532(64%)	342146(36%)
-
-Analysing trace for hmmer
-Count: 3509764
-Printing Statistics
-Layer 2 Hits and Misses:
-1766343(50%)	1743421(50%)
-Layer 3 Hits and Misses:
-1352195(77%)	391226(23%)
-
-Analysing trace for sphinx3
-Count: 10753445
-Printing Statistics
-Layer 2 Hits and Misses:
-1933096(17%)	8820349(83%)
-Layer 3 Hits and Misses:
-612987(6%)	8207362(94%)
-
+...
 ```
+5. You may check the `results/` folder for the complete results.
 
 ## Problem 2
 
@@ -85,5 +56,35 @@ Layer 3 Hits and Misses:
 ```
 
 2. Output
+```Application to analyse traces
+Problem 2 : Inclusive Policy. Will show results for problem 1 and 2
+
+Analysing trace for bzip2
+Printing Statistics
+Layer 2 Hits and Misses:
+5259459(49%)	5398166(51%)
+Layer 3 Hits and Misses:
+3951778(73%)	1446388(27%)
+Printing Statistics for Problem 2
+Layer 3 misses:
+Full Associative Cache Misses: 1361401
+Full Associative Cache Misses (With Belady): 533370
+Cold Misses: 119753
+Capacity Misses: 1241648
+Conflict Misses: 84987
+
+Misses with Belady:
+Cold Misses: 119753
+Capacity Misses: 413617
+Conflict Misses: 913018
+
+Analysing trace for gcc
+Printing Statistics
+Layer 2 Hits and Misses:
+11574348(79%)	3036461(21%)
+Layer 3 Hits and Misses:
+1663059(54%)	1373402(46%)
+...
 ```
-```
+
+3. You may check the `results/` folder for the complete results.

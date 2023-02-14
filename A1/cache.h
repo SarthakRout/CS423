@@ -5,6 +5,9 @@
 #include<cmath>
 #include<set>
 #include<utility>
+#include<map>
+#include<unordered_map>
+#include<queue>
 
 #define INCLUSIVE_POLICY    0
 #define NINE_POLICY         1
@@ -14,6 +17,7 @@ class Block {
     public:
     unsigned long long tag;
     int valid;
+    Block() : tag(0), valid(0) {}
     Block(unsigned long long tag, int valid) : tag(tag), valid(valid) {}
     bool operator<(const Block& rhs) const{
         return this->tag < rhs.tag;
@@ -28,22 +32,26 @@ class LRUCache {
         unsigned long long index;
         int offset;
         std::vector<std::multiset<std::pair<int, Block>>> cache;
+        std::set<unsigned long long> coldctr;
+        std::map<unsigned long long, std::pair<int, Block>> fullAssoc; 
+        std::vector<unsigned long long> history;
+        int solvep2;
         Memory* mem;
         int misses;
         int hits;
         void initialise();
 
     public:
-        LRUCache(int ways, int block_size, int sz);
+        LRUCache(int ways, int block_size, int sz, int flag = 0);
         inline unsigned long long getBlockAddr(unsigned long long addr) const;
         inline unsigned long long getTag(unsigned long long block_addr) const;
         inline unsigned long long getAddr(unsigned long long tag, int indexBits) const;
         bool search(unsigned long long addr);
         unsigned long long insert(unsigned long long addr, bool& evicted);
         void invalidate(unsigned long long addr);
-        int getMisses() const;
-        int getHits() const;
+        std::pair<unsigned long long, unsigned long long> getStats() const;
         void setMem(Memory* mem);
+        unsigned long long getBeladyMisses();
         void reset();
 };
 
@@ -53,6 +61,7 @@ class Memory {
         std::vector<LRUCache> cache_layers;
         int policy_id;
         int timer;
+        bool solvep2;
         void implInclusivePolicy(unsigned long long addr, int hit_layer);
         void implNINEPolicy(unsigned long long addr, int hit_layer);
         void implExclusivePolicy(unsigned long long addr, int hit_layer);
@@ -60,12 +69,14 @@ class Memory {
     public:
         friend unsigned long long LRUCache::insert(unsigned long long addr, bool& evicted);
         friend bool LRUCache::search(unsigned long long addr);
+        friend void LRUCache::setMem(Memory * ptr);
         Memory(std::vector<LRUCache> v, int policy_id);
         // Takes address which is to be loaded and returns the block 
         // which contains the address (block address is returned)
         void handlePkt(unsigned long long addr);
         void reset(int policy_id);
-        void printStats();
+        std::vector<std::pair<unsigned long long, unsigned long long>> getStats();
+        unsigned long long getBeladyMisses();
 };
 
 
