@@ -4,7 +4,6 @@
 
 #define X_MASK(p) (unsigned long long)((1<<(p)) - 1)
 
-
 // LRUCache
 LRUCache::LRUCache(int ways, int block_size, int sz, int flag){
     this->ways = ways;
@@ -19,6 +18,7 @@ LRUCache::LRUCache(int ways, int block_size, int sz, int flag){
     this->initialise();
 }
 
+// Initialise data structures
 void LRUCache::initialise(){
     this->cache.clear();
     this->coldctr.clear();
@@ -30,6 +30,19 @@ void LRUCache::initialise(){
             temp.insert({INT32_MIN,{0ULL, 0}});
         }
         this->cache.push_back(temp);
+    }
+}
+
+// Sets trace for use by belady algorithm
+void Memory::setTrace(std::vector<unsigned long long>& hist){
+    int i = 0;
+    for(const auto& addr: hist){
+        unsigned long long block_addr = addr / 64;
+        this->bTrace[block_addr].push(i);
+        i++;
+    }    
+    for(auto& p: this->bTrace){
+        this->bTrace[p.first].push(INT32_MAX);
     }
 }
 
@@ -45,10 +58,28 @@ inline unsigned long long LRUCache::getAddr(unsigned long long tag, int indexBit
     return ((tag << this->index) + indexBits) << this->offset;
 }
 
+// Update cache data structure's lru state
+void LRUCache::update(unsigned long long block_addr){
+    assert(this->solvep2 == 3);
+    int indexBits = block_addr & X_MASK(this->index);
+    unsigned long long tag = this->getTag(block_addr);
+    if(fullAssoc.count(tag) && fullAssoc[tag].second.valid){
+        this->cache[indexBits].erase(this->cache[indexBits].lower_bound(this->fullAssoc[tag]));
+        this->fullAssoc.erase(tag);
+        long long lru = this->mem->bTrace[block_addr].front();
+        this->cache[indexBits].insert({-lru, {tag, 1}});
+        this->fullAssoc[tag] = {-lru, {tag, 1}};
+    }
+}
+
 bool LRUCache::search(unsigned long long addr) {
     unsigned long long block_addr = getBlockAddr(addr);
     if(this->solvep2 == 1){
         this->coldctr.insert(block_addr);
+    }
+    if(this->solvep2 == 4){
+        this->mem->bTrace[block_addr].pop();
+        this->mem->cache_layers[1].update(block_addr);
     }
     int indexBits = block_addr & X_MASK(this->index);
     unsigned long long tag = this->getTag(block_addr);
@@ -60,6 +91,21 @@ bool LRUCache::search(unsigned long long addr) {
             this->fullAssoc.erase(tag);
             this->cache[indexBits].insert({this->mem->timer, {tag, 1}});
             this->fullAssoc[tag] = {this->mem->timer, {tag, 1}};
+            return true;
+        }
+        else{
+            this->misses++;
+            return false;
+        }
+    }
+    else if(this->solvep2 == 3){
+        if(this->fullAssoc.count(tag) && this->fullAssoc[tag].second.valid){
+            this->hits++;
+            this->cache[indexBits].erase(this->cache[indexBits].lower_bound(this->fullAssoc[tag]));
+            this->fullAssoc.erase(tag);
+            long long lru = this->mem->bTrace[block_addr].front();
+            this->cache[indexBits].insert({-lru, {tag, 1}});
+            this->fullAssoc[tag] = {-lru, {tag, 1}};
             return true;
         }
         else{
@@ -90,22 +136,42 @@ unsigned long long LRUCache::insert(unsigned long long addr, bool& evicted){
     auto block = this->cache[indexBits].begin();
     if(block->second.valid == false){
         evicted = false;
-        this->cache[indexBits].erase(this->cache[indexBits].lower_bound(*block));
-        this->cache[indexBits].insert({this->mem->timer, {this->getTag(block_addr), 1}});
-        if(solvep2 == 2){
-            this->fullAssoc[this->getTag(block_addr)] = std::make_pair(this->mem->timer, Block(this->getTag(block_addr), 1)); 
+        if(solvep2 == 3){
+            this->cache[indexBits].erase(this->cache[indexBits].lower_bound(*block));
+            long long lru = this->mem->bTrace[block_addr].front();
+            this->cache[indexBits].insert({-lru, {this->getTag(block_addr), 1}});
+            this->fullAssoc[this->getTag(block_addr)] = std::make_pair(-lru, Block(this->getTag(block_addr), 1)); 
+
         }
+        else{
+            this->cache[indexBits].erase(this->cache[indexBits].lower_bound(*block));
+            this->cache[indexBits].insert({this->mem->timer, {this->getTag(block_addr), 1}});
+            if(solvep2 == 2){
+                this->fullAssoc[this->getTag(block_addr)] = std::make_pair(this->mem->timer, Block(this->getTag(block_addr), 1)); 
+            }   
+        }
+        
     }
     else{
         // Evicting this block
         evicted = true;
-        if(solvep2 == 2){
+        if(solvep2 == 3){
+            long long lru = this->mem->bTrace[block_addr].front();
             this->fullAssoc.erase(block->second.tag);
-            this->fullAssoc[this->getTag(block_addr)] = std::make_pair(this->mem->timer, Block(this->getTag(block_addr), 1)); 
+            this->fullAssoc[this->getTag(block_addr)] = std::make_pair(-lru, Block(this->getTag(block_addr), 1)); 
+            victim = this->getAddr(block->second.tag, indexBits);
+            this->cache[indexBits].erase(this->cache[indexBits].lower_bound(*block));
+            this->cache[indexBits].insert({-lru, {this->getTag(block_addr), 1}});
         }
-        victim = this->getAddr(block->second.tag, indexBits);
-        this->cache[indexBits].erase(this->cache[indexBits].lower_bound(*block));
-        this->cache[indexBits].insert({this->mem->timer, {this->getTag(block_addr), 1}});
+        else{
+            if(solvep2 == 2){
+                this->fullAssoc.erase(block->second.tag);
+                this->fullAssoc[this->getTag(block_addr)] = std::make_pair(this->mem->timer, Block(this->getTag(block_addr), 1)); 
+            }
+            victim = this->getAddr(block->second.tag, indexBits);
+            this->cache[indexBits].erase(this->cache[indexBits].lower_bound(*block));
+            this->cache[indexBits].insert({this->mem->timer, {this->getTag(block_addr), 1}});
+        }
     }
     return victim;
 }
@@ -146,6 +212,12 @@ std::pair<unsigned long long, unsigned long long> LRUCache::getStats() const {
         return {this->hits, this->coldctr.size()};
     }
     else if(solvep2 == 2){
+        return {this->hits, this->misses};
+    }
+    else if(solvep2 == 3){
+        return {this->hits, this->misses};
+    }
+    else if(solvep2 == 4){
         return {this->hits, this->misses};
     }
     return {0, 0};
@@ -293,7 +365,7 @@ std::vector<std::pair<unsigned long long, unsigned long long>> Memory::getStats(
     return v;
 }
 
-
+// With using L3 Trace history with mem2
 unsigned long long Memory::getBeladyMisses(){
     return this->cache_layers[1].getBeladyMisses();
 }

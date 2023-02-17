@@ -33,7 +33,7 @@ class LRUCache {
         int offset;
         std::vector<std::multiset<std::pair<int, Block>>> cache;
         std::set<unsigned long long> coldctr;
-        std::map<unsigned long long, std::pair<int, Block>> fullAssoc; 
+        std::map<long long, std::pair<int, Block>> fullAssoc; 
         std::vector<unsigned long long> history;
         int solvep2;
         Memory* mem;
@@ -53,6 +53,7 @@ class LRUCache {
         void setMem(Memory* mem);
         unsigned long long getBeladyMisses();
         void reset();
+        void update(unsigned long long addr);
 };
 
 
@@ -62,11 +63,15 @@ class Memory {
         int policy_id;
         int timer;
         bool solvep2;
+        // Implements Inclusive Policy
         void implInclusivePolicy(unsigned long long addr, int hit_layer);
+        // Implements Not-Inclusive-Not-Exclusive Policy
         void implNINEPolicy(unsigned long long addr, int hit_layer);
+        // Implements Exclusive Policy
         void implExclusivePolicy(unsigned long long addr, int hit_layer);
 
     public:
+        std::unordered_map<unsigned long long, std::queue<int>> bTrace;
         friend unsigned long long LRUCache::insert(unsigned long long addr, bool& evicted);
         friend bool LRUCache::search(unsigned long long addr);
         friend void LRUCache::setMem(Memory * ptr);
@@ -77,6 +82,7 @@ class Memory {
         void reset(int policy_id);
         std::vector<std::pair<unsigned long long, unsigned long long>> getStats();
         unsigned long long getBeladyMisses();
+        void setTrace(std::vector<unsigned long long>& trace);
 };
 
 
