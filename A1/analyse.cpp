@@ -35,7 +35,8 @@ std::vector<unsigned long long> getTrace(std::pair<const std::string, std::vecto
         struct entry temp;
         file.open(BASE_PATH + path, std::ios::in|std::ios::binary);
         if(file){
-            while(file.read((char *)&temp.i_or_d, sizeof(char))){
+            while(!file.eof()){
+                file.read((char *)&temp.i_or_d, sizeof(char));
                 file.read((char *)&temp.type, sizeof(char));
                 file.read((char *)&temp.addr, sizeof(unsigned long long));
                 file.read((char *)&temp.pc, sizeof(unsigned));
