@@ -63,8 +63,11 @@ class Memory {
         int policy_id;
         int timer;
         bool solvep2;
+        // Implements Inclusive Policy
         void implInclusivePolicy(unsigned long long addr, int hit_layer);
+        // Implements Not-Inclusive-Not-Exclusive Policy
         void implNINEPolicy(unsigned long long addr, int hit_layer);
+        // Implements Exclusive Policy
         void implExclusivePolicy(unsigned long long addr, int hit_layer);
 
     public:

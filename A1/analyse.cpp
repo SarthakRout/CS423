@@ -28,6 +28,7 @@ std::map<std::string, std::vector<std::string>> apps = {
 };
 std::string BASE_PATH = "./traces/";
 
+// Function that returns trace for Belady replacment policy
 std::vector<unsigned long long> getTrace(std::pair<const std::string, std::vector<std::string>> &app){
     std::vector<unsigned long long> trace;
     for(auto path: app.second){
@@ -43,6 +44,7 @@ std::vector<unsigned long long> getTrace(std::pair<const std::string, std::vecto
                 if(temp.type){
                     trace.push_back(temp.addr);
                 }
+                
             }
             file.close();
         }   
@@ -50,6 +52,8 @@ std::vector<unsigned long long> getTrace(std::pair<const std::string, std::vecto
     return trace;
 }
 
+
+// Processes all L1 miss addresses
 std::vector<std::pair<unsigned long long, unsigned long long>> solve(Memory& mem, std::pair<const std::string, std::vector<std::string>> &app){
     for(auto path: app.second){
         std::fstream file;

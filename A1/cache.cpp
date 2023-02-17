@@ -4,7 +4,6 @@
 
 #define X_MASK(p) (unsigned long long)((1<<(p)) - 1)
 
-
 // LRUCache
 LRUCache::LRUCache(int ways, int block_size, int sz, int flag){
     this->ways = ways;
@@ -19,6 +18,7 @@ LRUCache::LRUCache(int ways, int block_size, int sz, int flag){
     this->initialise();
 }
 
+// Initialise data structures
 void LRUCache::initialise(){
     this->cache.clear();
     this->coldctr.clear();
@@ -33,6 +33,7 @@ void LRUCache::initialise(){
     }
 }
 
+// Sets trace for use by belady algorithm
 void Memory::setTrace(std::vector<unsigned long long>& hist){
     int i = 0;
     for(const auto& addr: hist){
@@ -57,6 +58,7 @@ inline unsigned long long LRUCache::getAddr(unsigned long long tag, int indexBit
     return ((tag << this->index) + indexBits) << this->offset;
 }
 
+// Update cache data structure's lru state
 void LRUCache::update(unsigned long long block_addr){
     assert(this->solvep2 == 3);
     int indexBits = block_addr & X_MASK(this->index);
@@ -136,12 +138,10 @@ unsigned long long LRUCache::insert(unsigned long long addr, bool& evicted){
         evicted = false;
         if(solvep2 == 3){
             this->cache[indexBits].erase(this->cache[indexBits].lower_bound(*block));
-            // while(this->mem->bTrace[block_addr].front() <= this->mem->timer){
-            //     this->mem->bTrace[block_addr].pop();
-            // }
             long long lru = this->mem->bTrace[block_addr].front();
             this->cache[indexBits].insert({-lru, {this->getTag(block_addr), 1}});
             this->fullAssoc[this->getTag(block_addr)] = std::make_pair(-lru, Block(this->getTag(block_addr), 1)); 
+
         }
         else{
             this->cache[indexBits].erase(this->cache[indexBits].lower_bound(*block));
@@ -156,9 +156,6 @@ unsigned long long LRUCache::insert(unsigned long long addr, bool& evicted){
         // Evicting this block
         evicted = true;
         if(solvep2 == 3){
-            // while(this->mem->bTrace[block_addr].front() <= this->mem->timer){
-            //     this->mem->bTrace[block_addr].pop();
-            // }
             long long lru = this->mem->bTrace[block_addr].front();
             this->fullAssoc.erase(block->second.tag);
             this->fullAssoc[this->getTag(block_addr)] = std::make_pair(-lru, Block(this->getTag(block_addr), 1)); 
