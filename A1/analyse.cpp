@@ -20,11 +20,11 @@ void printHelp(){
 
 std::map<std::string, std::vector<std::string>> apps = {
     {"bzip2", {"bzip2.log_l1misstrace_0", "bzip2.log_l1misstrace_1"}}, 
-    // {"gcc", {"gcc.log_l1misstrace_0", "gcc.log_l1misstrace_1"}}, 
-    // {"gromacs", {"gromacs.log_l1misstrace_0"}}, 
-    // {"h264ref", {"h264ref.log_l1misstrace_0"}}, 
-    // {"hmmer", {"hmmer.log_l1misstrace_0"}}, 
-    // {"sphinx3", {"sphinx3.log_l1misstrace_0", "sphinx3.log_l1misstrace_1"}}
+    {"gcc", {"gcc.log_l1misstrace_0", "gcc.log_l1misstrace_1"}}, 
+    {"gromacs", {"gromacs.log_l1misstrace_0"}}, 
+    {"h264ref", {"h264ref.log_l1misstrace_0"}}, 
+    {"hmmer", {"hmmer.log_l1misstrace_0"}}, 
+    {"sphinx3", {"sphinx3.log_l1misstrace_0", "sphinx3.log_l1misstrace_1"}}
 };
 std::string BASE_PATH = "./traces/";
 
@@ -55,7 +55,8 @@ std::vector<std::pair<unsigned long long, unsigned long long>> solve(Memory& mem
         struct entry temp;
         file.open(BASE_PATH + path, std::ios::in|std::ios::binary);
         if(file){
-            while(file.read((char *)&temp.i_or_d, sizeof(char))){
+            while(!file.eof()){
+                file.read((char *)&temp.i_or_d, sizeof(char));
                 file.read((char *)&temp.type, sizeof(char));
                 file.read((char *)&temp.addr, sizeof(unsigned long long));
                 file.read((char *)&temp.pc, sizeof(unsigned));
@@ -152,8 +153,8 @@ int main(int argc, char** argv){
             // cache with Belady replacement policy for L3
             std::vector<unsigned long long> trace = getTrace(app);
             LRUCache L2B(L2_WAYS, BLOCK_SIZE, L2_SIZE, 4), L3B(L3_SIZE/BLOCK_SIZE, BLOCK_SIZE, L3_SIZE, 3);
-            L3B.setTrace(trace);
             Memory mem4({L2B, L3B}, INCLUSIVE_POLICY);
+            mem4.setTrace(trace);
             long long fullAssocMissesBelady = solve(mem4, app).back().second;
             std::cout << "Full Associative Cache Misses (With Belady): " << fullAssocMissesBelady << "\n";
 

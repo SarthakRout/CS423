@@ -33,7 +33,7 @@ void LRUCache::initialise(){
     }
 }
 
-void LRUCache::setTrace(std::vector<unsigned long long>& hist){
+void Memory::setTrace(std::vector<unsigned long long>& hist){
     int i = 0;
     for(const auto& addr: hist){
         unsigned long long block_addr = addr / 64;
@@ -43,7 +43,6 @@ void LRUCache::setTrace(std::vector<unsigned long long>& hist){
     for(auto& p: this->bTrace){
         this->bTrace[p.first].push(INT32_MAX);
     }
-    std::cout << " sdsdcd\n" << std::flush;
 }
 
 inline unsigned long long LRUCache::getBlockAddr(unsigned long long addr) const {
@@ -58,13 +57,27 @@ inline unsigned long long LRUCache::getAddr(unsigned long long tag, int indexBit
     return ((tag << this->index) + indexBits) << this->offset;
 }
 
+void LRUCache::update(unsigned long long block_addr){
+    assert(this->solvep2 == 3);
+    int indexBits = block_addr & X_MASK(this->index);
+    unsigned long long tag = this->getTag(block_addr);
+    if(fullAssoc.count(tag) && fullAssoc[tag].second.valid){
+        this->cache[indexBits].erase(this->cache[indexBits].lower_bound(this->fullAssoc[tag]));
+        this->fullAssoc.erase(tag);
+        long long lru = this->mem->bTrace[block_addr].front();
+        this->cache[indexBits].insert({-lru, {tag, 1}});
+        this->fullAssoc[tag] = {-lru, {tag, 1}};
+    }
+}
+
 bool LRUCache::search(unsigned long long addr) {
     unsigned long long block_addr = getBlockAddr(addr);
     if(this->solvep2 == 1){
         this->coldctr.insert(block_addr);
     }
     if(this->solvep2 == 4){
-        this->bTrace[block_addr].pop();
+        this->mem->bTrace[block_addr].pop();
+        this->mem->cache_layers[1].update(block_addr);
     }
     int indexBits = block_addr & X_MASK(this->index);
     unsigned long long tag = this->getTag(block_addr);
@@ -88,7 +101,7 @@ bool LRUCache::search(unsigned long long addr) {
             this->hits++;
             this->cache[indexBits].erase(this->cache[indexBits].lower_bound(this->fullAssoc[tag]));
             this->fullAssoc.erase(tag);
-            long long lru = this->bTrace[block_addr].front();
+            long long lru = this->mem->bTrace[block_addr].front();
             this->cache[indexBits].insert({-lru, {tag, 1}});
             this->fullAssoc[tag] = {-lru, {tag, 1}};
             return true;
@@ -123,10 +136,10 @@ unsigned long long LRUCache::insert(unsigned long long addr, bool& evicted){
         evicted = false;
         if(solvep2 == 3){
             this->cache[indexBits].erase(this->cache[indexBits].lower_bound(*block));
-            // while(this->bTrace[block_addr].front() <= this->mem->timer){
-            //     this->bTrace[block_addr].pop();
+            // while(this->mem->bTrace[block_addr].front() <= this->mem->timer){
+            //     this->mem->bTrace[block_addr].pop();
             // }
-            long long lru = this->bTrace[block_addr].front();
+            long long lru = this->mem->bTrace[block_addr].front();
             this->cache[indexBits].insert({-lru, {this->getTag(block_addr), 1}});
             this->fullAssoc[this->getTag(block_addr)] = std::make_pair(-lru, Block(this->getTag(block_addr), 1)); 
         }
@@ -143,10 +156,10 @@ unsigned long long LRUCache::insert(unsigned long long addr, bool& evicted){
         // Evicting this block
         evicted = true;
         if(solvep2 == 3){
-            // while(this->bTrace[block_addr].front() <= this->mem->timer){
-            //     this->bTrace[block_addr].pop();
+            // while(this->mem->bTrace[block_addr].front() <= this->mem->timer){
+            //     this->mem->bTrace[block_addr].pop();
             // }
-            long long lru = this->bTrace[block_addr].front();
+            long long lru = this->mem->bTrace[block_addr].front();
             this->fullAssoc.erase(block->second.tag);
             this->fullAssoc[this->getTag(block_addr)] = std::make_pair(-lru, Block(this->getTag(block_addr), 1)); 
             victim = this->getAddr(block->second.tag, indexBits);
