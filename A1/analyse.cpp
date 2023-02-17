@@ -20,13 +20,34 @@ void printHelp(){
 
 std::map<std::string, std::vector<std::string>> apps = {
     {"bzip2", {"bzip2.log_l1misstrace_0", "bzip2.log_l1misstrace_1"}}, 
-    {"gcc", {"gcc.log_l1misstrace_0", "gcc.log_l1misstrace_1"}}, 
-    {"gromacs", {"gromacs.log_l1misstrace_0"}}, 
-    {"h264ref", {"h264ref.log_l1misstrace_0"}}, 
-    {"hmmer", {"hmmer.log_l1misstrace_0"}}, 
-    {"sphinx3", {"sphinx3.log_l1misstrace_0", "sphinx3.log_l1misstrace_1"}}
+    // {"gcc", {"gcc.log_l1misstrace_0", "gcc.log_l1misstrace_1"}}, 
+    // {"gromacs", {"gromacs.log_l1misstrace_0"}}, 
+    // {"h264ref", {"h264ref.log_l1misstrace_0"}}, 
+    // {"hmmer", {"hmmer.log_l1misstrace_0"}}, 
+    // {"sphinx3", {"sphinx3.log_l1misstrace_0", "sphinx3.log_l1misstrace_1"}}
 };
 std::string BASE_PATH = "./traces/";
+
+std::vector<unsigned long long> getTrace(std::pair<const std::string, std::vector<std::string>> &app){
+    std::vector<unsigned long long> trace;
+    for(auto path: app.second){
+        std::fstream file;
+        struct entry temp;
+        file.open(BASE_PATH + path, std::ios::in|std::ios::binary);
+        if(file){
+            while(file.read((char *)&temp.i_or_d, sizeof(char))){
+                file.read((char *)&temp.type, sizeof(char));
+                file.read((char *)&temp.addr, sizeof(unsigned long long));
+                file.read((char *)&temp.pc, sizeof(unsigned));
+                if(temp.type){
+                    trace.push_back(temp.addr);
+                }
+            }
+            file.close();
+        }   
+    }
+    return trace;
+}
 
 std::vector<std::pair<unsigned long long, unsigned long long>> solve(Memory& mem, std::pair<const std::string, std::vector<std::string>> &app){
     for(auto path: app.second){
@@ -108,7 +129,11 @@ int main(int argc, char** argv){
 
             // Already counted current misses
             long long currentMisses = stats.back().second;
-            
+
+            // Counting cold misses for L3
+            LRUCache L2__(L2_WAYS, BLOCK_SIZE, L2_SIZE), L3__(L3_WAYS, BLOCK_SIZE, L3_SIZE, 1);
+            Memory mem3({L2__, L3__}, INCLUSIVE_POLICY);
+            long long coldMisses = solve(mem3, app).back().second;
 
             // Counting misses with using a fully associative 
             // cache with LRU replacement policy  for L3
@@ -116,19 +141,21 @@ int main(int argc, char** argv){
             Memory mem2({L2_, L3_}, INCLUSIVE_POLICY);
             long long fullAssocMisses = solve(mem2, app).back().second;
             std::cout << "Full Associative Cache Misses: " << fullAssocMisses << "\n";
-            long long fullAssocMissesBelady = mem2.getBeladyMisses();
-            std::cout << "Full Associative Cache Misses (With Belady): " << fullAssocMissesBelady << "\n";
             
-
-            // Counting cold misses for L3
-            LRUCache L2__(L2_WAYS, BLOCK_SIZE, L2_SIZE), L3__(L3_WAYS, BLOCK_SIZE, L3_SIZE, 1);
-            Memory mem3({L2__, L3__}, INCLUSIVE_POLICY);
-            long long coldMisses = solve(mem3, app).back().second;
-
             // Outputing results
             std::cout << "Cold Misses: " << coldMisses << "\n";
             std::cout << "Capacity Misses: " << fullAssocMisses - coldMisses << "\n";
             std::cout << "Conflict Misses: " << currentMisses - fullAssocMisses << "\n";
+            
+            
+            // Counting misses with using a fully associative 
+            // cache with Belady replacement policy for L3
+            std::vector<unsigned long long> trace = getTrace(app);
+            LRUCache L2B(L2_WAYS, BLOCK_SIZE, L2_SIZE, 4), L3B(L3_SIZE/BLOCK_SIZE, BLOCK_SIZE, L3_SIZE, 3);
+            L3B.setTrace(trace);
+            Memory mem4({L2B, L3B}, INCLUSIVE_POLICY);
+            long long fullAssocMissesBelady = solve(mem4, app).back().second;
+            std::cout << "Full Associative Cache Misses (With Belady): " << fullAssocMissesBelady << "\n";
 
             // Accounting for belady's optimal policy in fully associative case
             std::cout << "\nMisses with Belady:\n";

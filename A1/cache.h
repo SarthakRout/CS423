@@ -33,7 +33,8 @@ class LRUCache {
         int offset;
         std::vector<std::multiset<std::pair<int, Block>>> cache;
         std::set<unsigned long long> coldctr;
-        std::map<unsigned long long, std::pair<int, Block>> fullAssoc; 
+        std::map<long long, std::pair<int, Block>> fullAssoc; 
+        std::unordered_map<unsigned long long, std::queue<int>> bTrace;
         std::vector<unsigned long long> history;
         int solvep2;
         Memory* mem;
@@ -52,6 +53,7 @@ class LRUCache {
         std::pair<unsigned long long, unsigned long long> getStats() const;
         void setMem(Memory* mem);
         unsigned long long getBeladyMisses();
+        void setTrace(std::vector<unsigned long long>& trace);
         void reset();
 };
 
