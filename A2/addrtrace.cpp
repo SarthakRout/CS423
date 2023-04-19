@@ -136,7 +136,7 @@ int main(int argc, char* argv[])
     // string filename;
     
     // trace = fopen("raw_trace.out", "w");
-    new_trace = fopen("mem_trace4.out","w");
+    new_trace = fopen("mem_trace.out","w");
 
     INS_AddInstrumentFunction(Instruction, 0);
     PIN_AddFiniFunction(Fini, 0);
