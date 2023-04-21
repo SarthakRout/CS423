@@ -32,13 +32,11 @@ struct mem_access{
     uint64 global_ctr;
     uint64 addr;
     uint64 is_write;
-    uint64 orb_name;
 
     mem_access(){
         global_ctr = 0;
         addr = 0;
         is_write = 0;
-        orb_name = 50;
     }
 };
 
@@ -140,7 +138,7 @@ struct l1_cache{
                     break;
                     // REMOVE
                 }
-                else if(outstanding_req_buffer[i].is_write == 1 && (m.msg_name == MSG_PUTX || m.msg_name == MSG_PUTE)){
+                else if(outstanding_req_buffer[i].is_write == 1 && (m.msg_name == MSG_PUTX)){
                     id = i;
                     break;
                     // REMOVE
@@ -148,20 +146,11 @@ struct l1_cache{
 
             }
         }
-        // if(m.addr == 34356566963ULL){
-        //     printf("SMg: %lld, %lld, %lld, %lld, %d\n", m.addr, m.sender, m.receiver, m.msg_name, id);
-        // }
         if(id == -1){
-            // printf("SMg: %lld, %lld, %lld, %lld\n", m.addr, m.sender, m.receiver, m.msg_name);
             printf("Kuch to gadbad hai daya\n");
             return;
         }
         outstanding_req_buffer.erase(outstanding_req_buffer.begin() + id);
-    }
-
-    int dev(){
-        int x = 0;
-        return x + 1;
     }
 
 
@@ -176,10 +165,6 @@ struct l1_cache{
                     // REMOVE
                 }
             }
-        }
-        if(ma.addr == 34356566963ULL){
-            // dev();
-            printf("SMgX: %lld, %lld, %lld, %d\n", ma.addr, ma.global_ctr, ma.is_write, ma.orb_name);
         }
         if(id == -1){
             // printf("Kuch to gadbad hai daya xy\n");

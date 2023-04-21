@@ -1,5 +1,5 @@
 #include<bits/stdc++.h>
-#include "structure.h"
+#include "structure-old.h"
 using namespace std;
 
 vector<struct l1_cache> l1_cache_array(8);
@@ -20,19 +20,17 @@ void process_l1_input(uint64 i , struct mem_access & ma){
         if(l1_cache_array[i].is_cache_hit(ma.addr)){
             // then return and update lru
             l1_cache_array[i].update_lru(ma.addr, Cycle);
-            if(ma.global_ctr == 0){
-                l1_cache_array[i].remove_orb_ma(ma);
-            }
+            l1_cache_array[i].remove_orb_ma(ma);
         }
         else{
             // else 
             // check for outstanding msg queue 
-            if(ma.global_ctr == 0){
-                uint64 home = ma.addr&7;
-                struct msg mx = {MSG_GET, i, ma.addr, home};
-                l2_bank_array[home].msg_incoming.push(mx);
-                return;
-            }
+            // if(ma.global_ctr == 0){
+            //     uint64 home = ma.addr&7;
+            //     struct msg mx = {MSG_GET, i, ma.addr, home};
+            //     l2_bank_array[home].msg_incoming.push(mx);
+            //     return;
+            // }
             for(auto &x: l1_cache_array[i].outstanding_req_buffer){
                 if(x.addr == ma.addr){
                     x.global_ctr = max(x.global_ctr, ma.global_ctr);
@@ -43,7 +41,6 @@ void process_l1_input(uint64 i , struct mem_access & ma){
             uint64 home = ma.addr&7;
             struct msg mx = {MSG_GET, i, ma.addr, home};
             l2_bank_array[home].msg_incoming.push(mx);
-            ma.orb_name = MSG_GET;
             l1_cache_array[i].outstanding_req_buffer.push_back(ma);
             // request for block and put this in outstanding vector
             return;
@@ -58,23 +55,12 @@ void process_l1_input(uint64 i , struct mem_access & ma){
             if(state == EXCLUSIVE){
             // is state is E, silently modify data and change state to M  and update lru
                 l1_cache_array[i].update_state(ma.addr, MODIFIED);
-                if(ma.global_ctr == 0){
-                    l1_cache_array[i].remove_orb_ma(ma);
-                } 
+                l1_cache_array[i].remove_orb_ma(ma);
             }
             else if(state == SHARED){
-        //         if(ma.addr == 34356566963ULL){
-        //     printf("SMgXIN: %lld, %lld, %lld, %d\n", ma.addr, ma.global_ctr, ma.is_write, 0);
-        // }
-                if(ma.global_ctr == 0){
-                    uint64 home = ma.addr&7;
-                    struct msg mx = {MSG_UPGR, i, ma.addr, home};
-                    l2_bank_array[home].msg_incoming.push(mx);
-                    return;
-                }
             // if state is S, send upgrade request and check outstanding req buffer
                 for(auto &x: l1_cache_array[i].outstanding_req_buffer){
-                    if(x.addr == ma.addr && x.orb_name == MSG_UPGR){
+                    if(x.addr == ma.addr && x.is_write == 1){
                         x.global_ctr = max(x.global_ctr, ma.global_ctr);
                         return;
                     }
@@ -83,7 +69,6 @@ void process_l1_input(uint64 i , struct mem_access & ma){
                 uint64 home = ma.addr&7;
                 struct msg mx = {MSG_UPGR, i, ma.addr, home};
                 l2_bank_array[home].msg_incoming.push(mx);
-                ma.orb_name = MSG_UPGR;
                 l1_cache_array[i].outstanding_req_buffer.push_back(ma);
                 // It is possible that due to race condition, the home bank
                 // may send invalidation request for this block
@@ -96,9 +81,7 @@ void process_l1_input(uint64 i , struct mem_access & ma){
                 // }
                 // if state is M, modify update lru 
                 l1_cache_array[i].update_lru(ma.addr, Cycle);
-                if(ma.global_ctr == 0){
-                    l1_cache_array[i].remove_orb_ma(ma);
-                } 
+                l1_cache_array[i].remove_orb_ma(ma);
             }
             else{
                 printf("Should never come here\n");
@@ -107,17 +90,8 @@ void process_l1_input(uint64 i , struct mem_access & ma){
         }
         else{
             //  Write Miss
-        //     if(ma.addr == 34356566963ULL){
-        //     printf("SMgXWMiss: %lld, %lld, %lld, %d\n", ma.addr, ma.global_ctr, ma.is_write, 0);
-        // }
-            if(ma.global_ctr == 0){
-                uint64 home = ma.addr&7;
-                struct msg mx = {MSG_GETX, i, ma.addr, home};
-                l2_bank_array[home].msg_incoming.push(mx);
-                return;
-            }
             for(auto &x: l1_cache_array[i].outstanding_req_buffer){
-                if(x.addr == ma.addr && x.orb_name == MSG_GETX){
+                if(x.addr == ma.addr && x.is_write == 1){
                     x.global_ctr = max(x.global_ctr, ma.global_ctr);
                     return;
                 }
@@ -126,7 +100,6 @@ void process_l1_input(uint64 i , struct mem_access & ma){
             uint64 home = ma.addr&7;
             struct msg mx = {MSG_GETX, i, ma.addr, home};
             l2_bank_array[home].msg_incoming.push(mx);
-            ma.orb_name = MSG_GETX;
             l1_cache_array[i].outstanding_req_buffer.push_back(ma);
         }
         
@@ -248,7 +221,6 @@ void process_l1_msg_inc(uint64 i, struct msg & m){
                                 ma.global_ctr = 0;
                                 ma.addr = m.addr;
                                 ma.is_write = 1;
-                                ma.orb_name = MSG_GETX;
                                 l1_cache_array[i].snacks.push({Cycle + 5, ma});
                             }
                             else{
@@ -295,7 +267,6 @@ void process_l1_msg_inc(uint64 i, struct msg & m){
             ma.global_ctr = 0;
             ma.addr = m.addr;
             ma.is_write = m.nack_is_write;
-            ma.orb_name = m.msg_name;
             l1_cache_array[i].snacks.push({Cycle + 5, ma});
             // Insert the NACKed request to snack queue with updated counter (cycle+5)
             break;
@@ -356,7 +327,6 @@ void process_l1_msg_inc(uint64 i, struct msg & m){
                         ma.global_ctr = 0;
                         ma.addr = m.addr;
                         ma.is_write = 1;
-                        ma.orb_name = MSG_GETX;
                         l1_cache_array[i].snacks.push({Cycle + 5, ma});
                     }
                     else{
@@ -513,7 +483,7 @@ void process_l2_msg_inc(uint64 i, struct msg & m){
             }
             else{
                 // L2 hit
-                if(dstate == L2_PSH || dstate == L2_PDEX || dstate == L2_SHARED){
+                if(dstate == L2_PSH || dstate == L2_PDEX){
                     struct msg mx = {MSG_NACK, i, m.addr, m.sender, 0, 0, 1}; // nack_is_write = 1, due to getX
                     l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push(mx);
                 }
@@ -540,19 +510,19 @@ void process_l2_msg_inc(uint64 i, struct msg & m){
                     }
                 }
                 else if(dstate == L2_SHARED){
-                    // auto tdent = l2_bank_array[i].get_dentry(m.addr);
-                    // uint64 sum = 0;
-                    // for(uint64 ctr = 0; ctr<8; ctr++){
-                    //     if(tdent[ctr] == 1){
-                    //         struct msg mx = {MSG_INVAL, m.sender, m.addr, ctr, 0, 0, 0}; // sender = original sender
-                    //         tdent[ctr] = 0;
-                    //         sum++;
-                    //     }
-                    // }
-                    // tdent[m.sender] = 1;
-                    // l2_bank_array[i].update_dad(m.addr, L2_EM, tdent);
-                    // struct msg mx = {MSG_PUTX, i, m.addr, m.sender, sum, 0, 0};
-                    // l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push(mx);
+                    auto tdent = l2_bank_array[i].get_dentry(m.addr);
+                    uint64 sum = 0;
+                    for(uint64 ctr = 0; ctr<8; ctr++){
+                        if(tdent[ctr] == 1){
+                            struct msg mx = {MSG_INVAL, m.sender, m.addr, ctr, 0, 0, 0}; // sender = original sender
+                            tdent[ctr] = 0;
+                            sum++;
+                        }
+                    }
+                    tdent[m.sender] = 1;
+                    l2_bank_array[i].update_dad(m.addr, L2_EM, tdent);
+                    struct msg mx = {MSG_PUTX, i, m.addr, m.sender, sum, 0, 0};
+                    l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push(mx);
                 }
             }
             // Check if the block is in L2 cache:
@@ -879,7 +849,7 @@ int main()
 
         // Process L1 input
         for(uint64 i = 0; i<8; i++){
-            // if(temp_ma[i].addr == 34356566963ULL){
+            // if(temp_ma[i].addr == 34111106320ULL){
             //     cout << temp_ma[i].global_ctr <<" " << temp_ma[i].is_write <<"\n";
             // }
             process_l1_input(i, temp_ma[i]);
@@ -887,7 +857,7 @@ int main()
 
         // Process L1 incoming msg
         for(uint64 i = 0; i<8; i++){
-            // if(temp_msg_l1[i].addr == 34356566963ULL){
+            // if(temp_msg_l1[i].addr == 34111106320ULL){
             //     cout << temp_msg_l1[i].msg_name << " " << temp_msg_l1[i].sender << " " << temp_msg_l1[i].receiver << "\n";
             // }
             process_l1_msg_inc(i, temp_msg_l1[i]);
@@ -895,7 +865,7 @@ int main()
 
         // Process L2 incoming msg
         for(uint64 i = 0; i<8; i++){
-            // if(temp_msg_l2[i].addr == 34356566963ULL){
+            // if(temp_msg_l2[i].addr == 34111106320ULL){
             //     cout << temp_msg_l2[i].msg_name << " " << temp_msg_l2[i].sender << " " << temp_msg_l2[i].receiver << "\n";
             // }
             process_l2_msg_inc(i, temp_msg_l2[i]);
