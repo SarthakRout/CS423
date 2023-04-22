@@ -20,9 +20,9 @@ PIN_LOCK pinLock;
 UINT64 global_ctr=0;
 
 struct mem_access{
+    UINT64 ctr;
     UINT64 addr;
     UINT64 is_write;
-    UINT64 ctr;
 };
 
 // Print a memory read record
@@ -52,8 +52,8 @@ VOID RecordMemAccess(VOID * addr, USIZE size, THREADID tid,USIZE iswrite)
           temp.is_write = iswrite;
           temp.ctr=global_ctr;
           global_ctr++;
-        //   fwrite(&temp, sizeof(temp), 1, trace[tid]); fflush(trace[tid]);
-          fprintf(trace[tid],"%lu %lu %lu\n",temp.ctr,temp.addr>>3,temp.is_write); fflush(trace[tid]);
+        temp.addr >>=3; fwrite(&temp, sizeof(temp), 1, trace[tid]); fflush(trace[tid]);
+          // fprintf(trace[tid],"%lu %lu %lu\n",temp.ctr,temp.addr>>3,temp.is_write); fflush(trace[tid]);
           trace_length++;
           trace_per_thread_len[tid]++;          
           PIN_ReleaseLock(&pinLock);
@@ -65,8 +65,8 @@ VOID RecordMemAccess(VOID * addr, USIZE size, THREADID tid,USIZE iswrite)
           temp.is_write = iswrite;
           temp.ctr=global_ctr;
           global_ctr++;
-        //   fwrite(&temp, sizeof(temp), 1, trace[tid]); fflush(trace[tid]);
-        fprintf(trace[tid],"%lu %lu %lu\n",temp.ctr,temp.addr>>3,temp.is_write); fflush(trace[tid]);
+        temp.addr >>=3; fwrite(&temp, sizeof(temp), 1, trace[tid]); fflush(trace[tid]);
+        // fprintf(trace[tid],"%lu %lu %lu\n",temp.ctr,temp.addr>>3,temp.is_write); fflush(trace[tid]);
           trace_length++;
             trace_per_thread_len[tid]++;
           PIN_ReleaseLock(&pinLock);
@@ -78,8 +78,8 @@ VOID RecordMemAccess(VOID * addr, USIZE size, THREADID tid,USIZE iswrite)
           temp.is_write = iswrite;
           temp.ctr=global_ctr;
           global_ctr++;
-        //   fwrite(&temp, sizeof(temp), 1, trace[tid]); fflush(trace[tid]);
-        fprintf(trace[tid],"%lu %lu %lu\n",temp.ctr,temp.addr>>3,temp.is_write); fflush(trace[tid]);
+        temp.addr >>=3; fwrite(&temp, sizeof(temp), 1, trace[tid]); fflush(trace[tid]);
+        // fprintf(trace[tid],"%lu %lu %lu\n",temp.ctr,temp.addr>>3,temp.is_write); fflush(trace[tid]);
           trace_length++;
             trace_per_thread_len[tid]++;
           PIN_ReleaseLock(&pinLock);
@@ -91,8 +91,8 @@ VOID RecordMemAccess(VOID * addr, USIZE size, THREADID tid,USIZE iswrite)
           temp.is_write = iswrite;
           temp.ctr=global_ctr;
           global_ctr++;
-        //   fwrite(&temp, sizeof(temp), 1, trace[tid]); fflush(trace[tid]);
-        fprintf(trace[tid],"%lu %lu %lu\n",temp.ctr,temp.addr>>3,temp.is_write); fflush(trace[tid]);
+        temp.addr >>=3; fwrite(&temp, sizeof(temp), 1, trace[tid]); fflush(trace[tid]);
+        // fprintf(trace[tid],"%lu %lu %lu\n",temp.ctr,temp.addr>>3,temp.is_write); fflush(trace[tid]);
           trace_length++;
             trace_per_thread_len[tid]++;
           PIN_ReleaseLock(&pinLock);
@@ -113,8 +113,8 @@ VOID RecordMemAccess(VOID * addr, USIZE size, THREADID tid,USIZE iswrite)
           temp.is_write = iswrite;
           temp.ctr=global_ctr;
           global_ctr++;
-        //   fwrite(&temp, sizeof(temp), 1, trace[tid]); fflush(trace[tid]);
-        fprintf(trace[tid],"%lu %lu %lu\n",temp.ctr,temp.addr>>3,temp.is_write); fflush(trace[tid]);
+        temp.addr >>=3; fwrite(&temp, sizeof(temp), 1, trace[tid]); fflush(trace[tid]);
+        // fprintf(trace[tid],"%lu %lu %lu\n",temp.ctr,temp.addr>>3,temp.is_write); fflush(trace[tid]);
           trace_length++;
             trace_per_thread_len[tid]++;
           PIN_ReleaseLock(&pinLock);
@@ -126,8 +126,8 @@ VOID RecordMemAccess(VOID * addr, USIZE size, THREADID tid,USIZE iswrite)
           temp.is_write = iswrite;
           temp.ctr=global_ctr;
           global_ctr++;
-        //   fwrite(&temp, sizeof(temp), 1, trace[tid]); fflush(trace[tid]);
-        fprintf(trace[tid],"%lu %lu %lu\n",temp.ctr,temp.addr>>3,temp.is_write); fflush(trace[tid]);
+        temp.addr >>=3; fwrite(&temp, sizeof(temp), 1, trace[tid]); fflush(trace[tid]);
+        // fprintf(trace[tid],"%lu %lu %lu\n",temp.ctr,temp.addr>>3,temp.is_write); fflush(trace[tid]);
           trace_length++;
             trace_per_thread_len[tid]++;
           PIN_ReleaseLock(&pinLock);
@@ -139,8 +139,8 @@ VOID RecordMemAccess(VOID * addr, USIZE size, THREADID tid,USIZE iswrite)
           temp.is_write = iswrite;
           temp.ctr=global_ctr;
           global_ctr++;
-        //   fwrite(&temp, sizeof(temp), 1, trace[tid]); fflush(trace[tid]);
-        fprintf(trace[tid],"%lu %lu %lu\n",temp.ctr,temp.addr>>3,temp.is_write); fflush(trace[tid]);
+        temp.addr >>=3; fwrite(&temp, sizeof(temp), 1, trace[tid]); fflush(trace[tid]);
+        // fprintf(trace[tid],"%lu %lu %lu\n",temp.ctr,temp.addr>>3,temp.is_write); fflush(trace[tid]);
           trace_length++;
             trace_per_thread_len[tid]++;
           PIN_ReleaseLock(&pinLock);
@@ -152,8 +152,8 @@ VOID RecordMemAccess(VOID * addr, USIZE size, THREADID tid,USIZE iswrite)
           temp.is_write = iswrite;
           temp.ctr=global_ctr;
           global_ctr++;
-        //   fwrite(&temp, sizeof(temp), 1, trace[tid]); fflush(trace[tid]);
-        fprintf(trace[tid],"%lu %lu %lu\n",temp.ctr,temp.addr>>3,temp.is_write); fflush(trace[tid]);
+        temp.addr >>=3; fwrite(&temp, sizeof(temp), 1, trace[tid]); fflush(trace[tid]);
+        // fprintf(trace[tid],"%lu %lu %lu\n",temp.ctr,temp.addr>>3,temp.is_write); fflush(trace[tid]);
           trace_length++;
             trace_per_thread_len[tid]++;
           PIN_ReleaseLock(&pinLock);
@@ -169,8 +169,9 @@ VOID RecordMemAccess(VOID * addr, USIZE size, THREADID tid,USIZE iswrite)
              temp.is_write = iswrite;
              temp.ctr=global_ctr;
              global_ctr++;
-            //  fwrite(&temp, sizeof(temp), 1, trace[tid]); fflush(trace[tid]);
-            fprintf(trace[tid],"%lu %lu %lu\n",temp.ctr,temp.addr>>3,temp.is_write); fflush(trace[tid]);
+             temp.addr >>= 3;
+             fwrite(&temp, sizeof(temp), 1, trace[tid]); fflush(trace[tid]);
+             // fprintf(trace[tid],"%lu %lu %lu\n",temp.ctr,temp.addr>>3,temp.is_write); fflush(trace[tid]);
              trace_length++;
                 trace_per_thread_len[tid]++;
              PIN_ReleaseLock(&pinLock);
@@ -192,8 +193,8 @@ VOID RecordMemAccess(VOID * addr, USIZE size, THREADID tid,USIZE iswrite)
           temp.is_write = iswrite;
           temp.ctr=global_ctr;
           global_ctr++;
-        //   fwrite(&temp, sizeof(temp), 1, trace[tid]); fflush(trace[tid]);
-        fprintf(trace[tid],"%lu %lu %lu\n",temp.ctr,temp.addr>>3,temp.is_write); fflush(trace[tid]);
+        temp.addr >>=3; fwrite(&temp, sizeof(temp), 1, trace[tid]); fflush(trace[tid]);
+        // fprintf(trace[tid],"%lu %lu %lu\n",temp.ctr,temp.addr>>3,temp.is_write); fflush(trace[tid]);
           trace_length++;
             trace_per_thread_len[tid]++;
           PIN_ReleaseLock(&pinLock);
@@ -205,8 +206,8 @@ VOID RecordMemAccess(VOID * addr, USIZE size, THREADID tid,USIZE iswrite)
           temp.is_write = iswrite;
           temp.ctr=global_ctr;
           global_ctr++;
-        //   fwrite(&temp, sizeof(temp), 1, trace[tid]); fflush(trace[tid]);
-        fprintf(trace[tid],"%lu %lu %lu\n",temp.ctr,temp.addr>>3,temp.is_write); fflush(trace[tid]);
+        temp.addr >>=3; fwrite(&temp, sizeof(temp), 1, trace[tid]); fflush(trace[tid]);
+        // fprintf(trace[tid],"%lu %lu %lu\n",temp.ctr,temp.addr>>3,temp.is_write); fflush(trace[tid]);
           trace_length++;
             trace_per_thread_len[tid]++;
           PIN_ReleaseLock(&pinLock);
@@ -218,8 +219,8 @@ VOID RecordMemAccess(VOID * addr, USIZE size, THREADID tid,USIZE iswrite)
           temp.is_write = iswrite;
           temp.ctr=global_ctr;
           global_ctr++;
-        //   fwrite(&temp, sizeof(temp), 1, trace[tid]); fflush(trace[tid]);
-        fprintf(trace[tid],"%lu %lu %lu\n",temp.ctr,temp.addr>>3,temp.is_write); fflush(trace[tid]);
+        temp.addr >>=3; fwrite(&temp, sizeof(temp), 1, trace[tid]); fflush(trace[tid]);
+        // fprintf(trace[tid],"%lu %lu %lu\n",temp.ctr,temp.addr>>3,temp.is_write); fflush(trace[tid]);
           trace_length++;
             trace_per_thread_len[tid]++;
           PIN_ReleaseLock(&pinLock);
@@ -231,8 +232,8 @@ VOID RecordMemAccess(VOID * addr, USIZE size, THREADID tid,USIZE iswrite)
           temp.is_write = iswrite;
           temp.ctr=global_ctr;
           global_ctr++;
-        //   fwrite(&temp, sizeof(temp), 1, trace[tid]); fflush(trace[tid]);
-        fprintf(trace[tid],"%lu %lu %lu\n",temp.ctr,temp.addr>>3,temp.is_write); fflush(trace[tid]);
+        temp.addr >>=3; fwrite(&temp, sizeof(temp), 1, trace[tid]); fflush(trace[tid]);
+        // fprintf(trace[tid],"%lu %lu %lu\n",temp.ctr,temp.addr>>3,temp.is_write); fflush(trace[tid]);
           trace_length++;
             trace_per_thread_len[tid]++;
           PIN_ReleaseLock(&pinLock);

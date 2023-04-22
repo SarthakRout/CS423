@@ -4,6 +4,21 @@ using namespace std;
 
 vector<struct l1_cache> l1_cache_array(8);
 vector<struct l2_bank> l2_bank_array(8);
+uint64 l1_accs, l1_misses;
+unordered_map<int, int> l1_count, l2_count;
+uint64 upgr_misses;
+unordered_map<uint64, int> reason;
+
+void send_msg(uint64 layer, uint64 recv, struct msg & mx){
+    if(layer == 1){
+        l1_count[mx.msg_name]++;
+        l1_cache_array[recv].msg_from_l2_or_l1_cache.push_back(mx);
+    }
+    else{
+        l2_count[mx.msg_name]++;
+        l2_bank_array[recv].msg_incoming.push(mx);
+    }
+}
 
 
 void process_l1_input(uint64 i , struct mem_access & ma){
@@ -11,9 +26,10 @@ void process_l1_input(uint64 i , struct mem_access & ma){
     if(ma.addr == 0){
         return;
     }
+    l1_accs++;
     if(ma.is_write == 0){
         // read
-        // if is cache hit
+;        // if is cache hit
         // if(ma.addr == 34111106320ULL && ma.global_ctr == 0){
         //     cout << "Here\n";
         // }
@@ -25,12 +41,17 @@ void process_l1_input(uint64 i , struct mem_access & ma){
             }
         }
         else{
+            l1_misses++;
+            if(reason[ma.addr]){
+                upgr_misses++;
+            }
             // else 
             // check for outstanding msg queue 
             if(ma.global_ctr == 0){
                 uint64 home = ma.addr&7;
                 struct msg mx = {MSG_GET, i, ma.addr, home};
-                l2_bank_array[home].msg_incoming.push(mx);
+                send_msg(2, home, mx);
+                // l2_bank_array[home].msg_incoming.push(mx);
                 return;
             }
             for(auto &x: l1_cache_array[i].outstanding_req_buffer){
@@ -42,7 +63,8 @@ void process_l1_input(uint64 i , struct mem_access & ma){
             // otherwise send message to l2 homebank to 
             uint64 home = ma.addr&7;
             struct msg mx = {MSG_GET, i, ma.addr, home};
-            l2_bank_array[home].msg_incoming.push(mx);
+            send_msg(2, home, mx);
+            // l2_bank_array[home].msg_incoming.push(mx);
             ma.orb_name = MSG_GET;
             l1_cache_array[i].outstanding_req_buffer.push_back(ma);
             // request for block and put this in outstanding vector
@@ -69,7 +91,8 @@ void process_l1_input(uint64 i , struct mem_access & ma){
                 if(ma.global_ctr == 0){
                     uint64 home = ma.addr&7;
                     struct msg mx = {MSG_UPGR, i, ma.addr, home};
-                    l2_bank_array[home].msg_incoming.push(mx);
+                    send_msg(2, home, mx);
+                    // l2_bank_array[home].msg_incoming.push(mx);
                     return;
                 }
             // if state is S, send upgrade request and check outstanding req buffer
@@ -82,7 +105,8 @@ void process_l1_input(uint64 i , struct mem_access & ma){
                 // otherwise send message to l2 homebank to 
                 uint64 home = ma.addr&7;
                 struct msg mx = {MSG_UPGR, i, ma.addr, home};
-                l2_bank_array[home].msg_incoming.push(mx);
+                send_msg(2, home, mx);
+                // l2_bank_array[home].msg_incoming.push(mx);
                 ma.orb_name = MSG_UPGR;
                 l1_cache_array[i].outstanding_req_buffer.push_back(ma);
                 // It is possible that due to race condition, the home bank
@@ -106,14 +130,16 @@ void process_l1_input(uint64 i , struct mem_access & ma){
             // and return
         }
         else{
+            l1_misses++;
+            if(reason[ma.addr]){
+                upgr_misses++;
+            }
             //  Write Miss
-        //     if(ma.addr == 34356566963ULL){
-        //     printf("SMgXWMiss: %lld, %lld, %lld, %d\n", ma.addr, ma.global_ctr, ma.is_write, 0);
-        // }
             if(ma.global_ctr == 0){
                 uint64 home = ma.addr&7;
                 struct msg mx = {MSG_GETX, i, ma.addr, home};
-                l2_bank_array[home].msg_incoming.push(mx);
+                send_msg(2, home, mx);
+                // l2_bank_array[home].msg_incoming.push(mx);
                 return;
             }
             for(auto &x: l1_cache_array[i].outstanding_req_buffer){
@@ -125,7 +151,8 @@ void process_l1_input(uint64 i , struct mem_access & ma){
             // otherwise send message to l2 homebank to 
             uint64 home = ma.addr&7;
             struct msg mx = {MSG_GETX, i, ma.addr, home};
-            l2_bank_array[home].msg_incoming.push(mx);
+            send_msg(2, home, mx);
+            // l2_bank_array[home].msg_incoming.push(mx);
             ma.orb_name = MSG_GETX;
             l1_cache_array[i].outstanding_req_buffer.push_back(ma);
         }
@@ -148,6 +175,14 @@ void process_l1_msg_inc(uint64 i, struct msg & m){
             // Possible states: I, E, M; Couldn't have block in S state
             auto state = l1_cache_array[i].cache_block_state(m.addr);
             if(state == INVALID){
+                for(auto& x: l1_cache_array[i].putx_buf){
+                    if(x.putx.addr == m.addr){
+                        // Special case
+                        assert(x.pend.addr == 0);
+                        x.pend = m;
+                    }
+                }
+
                 // Eat 5 star and do nothing
 
             }
@@ -156,12 +191,21 @@ void process_l1_msg_inc(uint64 i, struct msg & m){
                 l1_cache_array[i].update_state(m.addr, SHARED);
                 uint64 home = m.addr&7;
                 struct msg mx = {MSG_SWB, i, m.addr, home};
-                l2_bank_array[home].msg_incoming.push(mx);
+                send_msg(2, home, mx);
+                // l2_bank_array[home].msg_incoming.push(mx);
                 struct msg mx2 = {MSG_PUT, i, m.addr, m.sender}; // m.sender is original requester
-                l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push(mx2);
+                send_msg(1, m.sender, mx2);
+                // l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push_back(mx2);
             }
             else{
-                printf("Should never come here 3\n");
+                // printf("Should sometimes come here 3\n");
+                for(auto& x: l1_cache_array[i].putx_buf){
+                    if(x.putx.addr == m.addr){
+                        // Special case
+                        assert(x.pend.addr == 0);
+                        x.pend = m;
+                    }
+                }
             }
             // If state is I: It has evicted dirty block from M to I (race condition)
                 // Ignore GET and home will respond with WB_ACK for WB
@@ -174,23 +218,43 @@ void process_l1_msg_inc(uint64 i, struct msg & m){
             break;
         }
         case MSG_GETX: {
-            // Expects forwarded GET request from L2:
+            // Expects forwarded GETX request from L2:
             // Possible states: I, E, M; Couldn't have block in S state
 
             auto state = l1_cache_array[i].cache_block_state(m.addr);
             if(state == INVALID){
+                for(auto& x: l1_cache_array[i].putx_buf){
+                    if(x.putx.addr == m.addr){
+                        // Special case
+                        assert(x.pend.addr == 0);
+                        x.pend = m;
+                    }
+                }
                 // Eat 5 star and do nothing
+                // send_msg(1, m.sender, mx);
             }
             else if(state == EXCLUSIVE || state == MODIFIED){
                 l1_cache_array[i].update_state(m.addr, INVALID);
+                reason[m.addr] = 0;
                 uint64 home = m.addr&7;
                 struct msg mx = {MSG_OT, i, m.addr, home};
-                l2_bank_array[home].msg_incoming.push(mx);
+                send_msg(2, home, mx);
+                // l2_bank_array[home].msg_incoming.push(mx);
                 struct msg mx2 = {MSG_PUTX, i, m.addr, m.sender, 0, 0}; // m.sender is original requester
-                l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push(mx2);
+                send_msg(1, m.sender, mx2);
+                // l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push_back(mx2);
             }
             else{
-                printf("Err\n");
+                // printf("Err\n");
+                // Special race condition when directory apparently thinks
+                //  we are in M state, but sadly we are not
+                for(auto& x: l1_cache_array[i].putx_buf){
+                    if(x.putx.addr == m.addr){
+                        // Special case
+                        assert(x.pend.addr == 0);
+                        x.pend = m;
+                    }
+                }
             }
 
             // If state is I: It has evicted dirty block from M to I (race condition)
@@ -210,14 +274,22 @@ void process_l1_msg_inc(uint64 i, struct msg & m){
             auto state = l1_cache_array[i].cache_block_state(m.addr);
             if(state == INVALID){
                 struct msg mx2 = {MSG_INVAL_ACK, i, m.addr, m.sender}; // m.sender is original requester
-                l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push(mx2);
+                send_msg(1, m.sender, mx2);
+                // l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push_back(mx2);
             }
             else if(state == SHARED){
 
                 // Invalidate the set
+                if(m.upgr_miss){
+                    reason[m.addr] = 1;
+                }
+                else{
+                    reason[m.addr] = 0;
+                }
                 l1_cache_array[i].update_state(m.addr, INVALID);
                 struct msg mx2 = {MSG_INVAL_ACK, i, m.addr, m.sender}; // m.sender is original requester
-                l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push(mx2);
+                send_msg(1, m.sender, mx2);
+                // l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push_back(mx2);
             }
             // If state is I: Transitioned silently from S to I
                 // We will send a INVAL_ACK to requester(INVAL.sender)
@@ -234,14 +306,14 @@ void process_l1_msg_inc(uint64 i, struct msg & m){
             uint64 done = 0;
             uint64 ctr = 0;
             for(auto &x : l1_cache_array[i].putx_buf){
-                if(x.addr == m.addr){
+                if(x.putx.addr == m.addr){
                     // Match found
                     done = true;
-                    x.inval_ack_exp--;
-                    if(x.inval_ack_exp == 0){
+                    x.putx.inval_ack_exp--;
+                    if(x.putx.inval_ack_exp == 0){
                         struct l1_cache_block evicted;
                         if(state == INVALID){
-                            if(x.is_upgr_reply){
+                            if(x.putx.is_upgr_reply){
                                 // S to I 
                                 // Re request from I to M
                                 struct mem_access ma;
@@ -256,19 +328,25 @@ void process_l1_msg_inc(uint64 i, struct msg & m){
                                 evicted = l1_cache_array[i].insert(m.addr, MODIFIED);
                                 if(evicted.states == EXCLUSIVE || evicted.states == MODIFIED){
                                     struct msg mx = {MSG_SIMPL_WB, i, evicted.tag, evicted.tag & 7};
+                                    send_msg(2, evicted.tag & 7, mx);
+                                    reason[evicted.tag] = 0;
+                                    // l2_bank_array[evicted.tag & 7].msg_incoming.push(mx);
                                 }
-                                l1_cache_array[i].remove_orb(x);
+                                l1_cache_array[i].remove_orb(x.putx);
                             }
                             
                         }
                         else if(state == SHARED){
                             l1_cache_array[i].update_state(m.addr, MODIFIED);
-                            l1_cache_array[i].remove_orb(x);
+                            l1_cache_array[i].remove_orb(x.putx);
                         }
                         else{
                             printf("Gadbad\n");
                         }
                         l1_cache_array[i].putx_buf.erase(l1_cache_array[i].putx_buf.begin() + ctr);
+                        if(x.pend.addr != 0){
+                            l1_cache_array[i].msg_from_l2_or_l1_cache.push_front(x.pend);
+                        }
                     }
                     break;
                 }
@@ -309,7 +387,9 @@ void process_l1_msg_inc(uint64 i, struct msg & m){
             if(evicted.states == MODIFIED || evicted.states == EXCLUSIVE){
                 uint64 home = evicted.tag & 7;
                 struct msg mx = {MSG_SIMPL_WB, i, evicted.tag, home};
-                l2_bank_array[home].msg_incoming.push(mx);
+                send_msg(2, home, mx);
+                reason[evicted.tag] = 0;
+                // l2_bank_array[home].msg_incoming.push(mx);
                 // send simplwb
             }            
             // Insert the cache block received in S state after possibly evicting some other block (Use function)
@@ -323,7 +403,9 @@ void process_l1_msg_inc(uint64 i, struct msg & m){
             if(evicted.states == MODIFIED || evicted.states == EXCLUSIVE){
                 uint64 home = evicted.tag & 7;
                 struct msg mx = {MSG_SIMPL_WB, i, evicted.tag, home};
-                l2_bank_array[home].msg_incoming.push(mx);
+                send_msg(2, home ,mx);
+                reason[evicted.tag] = 0;
+                // l2_bank_array[home].msg_incoming.push(mx);
                 // send simplwb
             }  
             // Possible states: I
@@ -334,17 +416,17 @@ void process_l1_msg_inc(uint64 i, struct msg & m){
                  
             // Remove corresponding GETX/Upgr request from out. req. buffer
             auto state = l1_cache_array[i].cache_block_state(m.addr);
-            // if(m.addr == 2198820285657ULL){
-            //     cout << m.msg_name << " " << m.sender <<" "<< m.receiver << " " << state << "\n";
-            // }
             if(state == INVALID){
+            
                 if(m.inval_ack_exp == 0){
                     struct l1_cache_block evicted;
                     evicted = l1_cache_array[i].insert(m.addr, MODIFIED);
                     if(evicted.states == MODIFIED || evicted.states == EXCLUSIVE){
                         uint64 home = evicted.tag & 7;
                         struct msg mx = {MSG_SIMPL_WB, i, evicted.tag, home};
-                        l2_bank_array[home].msg_incoming.push(mx);
+                        send_msg(2,home, mx);
+                        reason[evicted.tag] = 0;
+                        // l2_bank_array[home].msg_incoming.push(mx);
                         // send simplwb
                     }  
                     l1_cache_array[i].remove_orb(m);
@@ -360,18 +442,18 @@ void process_l1_msg_inc(uint64 i, struct msg & m){
                         l1_cache_array[i].snacks.push({Cycle + 5, ma});
                     }
                     else{
-                        l1_cache_array[i].putx_buf.push_back(m);
+                        l1_cache_array[i].putx_buf.push_back({m});
                     }
                 }
             }
-            else if(state == SHARED){
+            else if(state == SHARED){        
                 if(m.inval_ack_exp == 0){
                     // Update state S to M
                     l1_cache_array[i].update_state(m.addr, MODIFIED);                    
                     l1_cache_array[i].remove_orb(m);
                 }
                 else{
-                    l1_cache_array[i].putx_buf.push_back(m);
+                    l1_cache_array[i].putx_buf.push_back({m});
                 }
             }
             // Possible states: I, S
@@ -388,11 +470,26 @@ void process_l1_msg_inc(uint64 i, struct msg & m){
         case MSG_INVAL_L2: {
             // Possible states: I, S, E, M
             auto state = l1_cache_array[i].cache_block_state(m.addr);
-            l1_cache_array[i].update_state(m.addr, INVALID);
-            if(state == EXCLUSIVE || state == MODIFIED){
+            if(state == INVALID){
+                for(auto&x: l1_cache_array[i].putx_buf){
+                    if(x.putx.addr == m.addr){
+                        // Special
+                        assert(x.pend.addr == 0);
+                        x.pend = m;
+                    }
+                }
+            }
+            else if(state == EXCLUSIVE || state == MODIFIED){
                 uint64 home = m.addr & 7;
                 struct msg mx = {MSG_INVAL_L2_REPLY, i, m.addr, home};
-                l2_bank_array[home].msg_incoming.push(mx);
+                send_msg(2, home, mx);
+                l1_cache_array[i].update_state(m.addr, INVALID);
+                reason[m.addr] = 0;
+                // l2_bank_array[home].msg_incoming.push(mx);
+            }
+            else{
+                l1_cache_array[i].update_state(m.addr, INVALID);
+                reason[m.addr] = 0;
             }
              // Send MSG_INVAL_L2_REPLY. Add data if E/M state
             break;
@@ -414,7 +511,8 @@ void l2_evicted(uint64 l2id, struct l2_cache_block & b){
             struct msg mx = {MSG_INVAL_L2, l2id, b.tag, i, 0, 0, 0};
             if(b.dentry[i] == 1){
                 // Send INVAL_L2
-                l1_cache_array[i].msg_from_l2_or_l1_cache.push(mx);
+                send_msg(1, i, mx);
+                // l1_cache_array[i].msg_from_l2_or_l1_cache.push_back(mx);
             }
         }
     }
@@ -423,7 +521,8 @@ void l2_evicted(uint64 l2id, struct l2_cache_block & b){
             struct msg mx = {MSG_INVAL_L2, l2id, b.tag, i, 0, 0, 0};
             if(b.dentry[i] == 1){
                 // Send INVAL_L2
-                l1_cache_array[i].msg_from_l2_or_l1_cache.push(mx);
+                send_msg(1,i, mx);
+                // l1_cache_array[i].msg_from_l2_or_l1_cache.push_back(mx);
             }
         }
         l2_bank_array[l2id].evict_buffer.push_back(b);
@@ -449,34 +548,40 @@ void process_l2_msg_inc(uint64 i, struct msg & m){
                 struct l2_cache_block evicted = l2_bank_array[i].insert(m.addr, m.sender, L2_EM);
                 l2_evicted(i, evicted);
                 struct msg mx = {MSG_PUTE, i, m.addr, m.sender, 0, 0, 0};
-                l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push(mx);
+                send_msg(1, m.sender, mx);
+                
+                // l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push_back(mx);
             }
             else{
                 // L2 hit
                 if(dstate == L2_PSH || dstate == L2_PDEX){
                     struct msg mx = {MSG_NACK, i, m.addr, m.sender, 0, 0, 0}; // nack+is_write = 0, due to get
-                    l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push(mx);
+                    send_msg(1, m.sender, mx);
+                    // l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push_back(mx);
                 }
                 else if(dstate == L2_UNOWNED){
                     auto tdent = l2_bank_array[i].get_dentry(m.addr);
                     tdent[m.sender] = 1;
                     l2_bank_array[i].update_dad(m.addr, L2_EM, tdent);
                     struct msg mx = {MSG_PUTE, i, m.addr, m.sender, 0, 0, 0};
-                    l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push(mx);
+                    send_msg(1, m.sender, mx);
+                    // l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push_back(mx);
                 }
                 else if(dstate == L2_EM){
                     m.receiver = l2_bank_array[i].get_owner(m.addr);
-                    l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push(m);
+                    l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push_back(m);
                     auto tdent = l2_bank_array[i].get_dentry(m.addr);
                     tdent[m.sender] = 1;
                     l2_bank_array[i].update_dad(m.addr, L2_PSH, tdent);
+                    send_msg(1, m.receiver, m);
                 }
                 else if(dstate == L2_SHARED){
                     auto tdent = l2_bank_array[i].get_dentry(m.addr);
                     tdent[m.sender] = 1;
                     l2_bank_array[i].update_dad(m.addr, L2_SHARED, tdent);
                     struct msg mx = {MSG_PUT, i, m.addr, m.sender, 0, 0, 0};
-                    l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push(mx);
+                    send_msg(1, m.sender, mx);
+                    // l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push_back(mx);
                 }
             }
             // Check if the block is in L2 cache:
@@ -509,50 +614,66 @@ void process_l2_msg_inc(uint64 i, struct msg & m){
                 struct l2_cache_block evicted = l2_bank_array[i].insert(m.addr, m.sender, L2_EM);
                 l2_evicted(i, evicted);
                 struct msg mx = {MSG_PUTX, i, m.addr, m.sender, 0, 0, 0};
-                l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push(mx);
+                send_msg(1, m.sender, mx);
+                // l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push_back(mx);
             }
             else{
                 // L2 hit
-                if(dstate == L2_PSH || dstate == L2_PDEX || dstate == L2_SHARED){
+                if(dstate == L2_PSH || dstate == L2_PDEX){
                     struct msg mx = {MSG_NACK, i, m.addr, m.sender, 0, 0, 1}; // nack_is_write = 1, due to getX
-                    l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push(mx);
+                    send_msg(1, m.sender, mx);
+                    // l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push_back(mx);
                 }
                 else if(dstate == L2_UNOWNED){
                     auto tdent = l2_bank_array[i].get_dentry(m.addr);
                     tdent[m.sender] = 1;
                     l2_bank_array[i].update_dad(m.addr, L2_EM, tdent);
                     struct msg mx = {MSG_PUTX, i, m.addr, m.sender, 0, 0, 0};
-                    l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push(mx);
+                    send_msg(1, m.sender, mx);
+                    // l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push_back(mx);
                 }
                 else if(dstate == L2_EM){
                     auto tdent = l2_bank_array[i].get_dentry(m.addr);
                     auto owner = l2_bank_array[i].get_owner(m.addr);
                     if(m.sender == owner){
                         struct msg mx = {MSG_NACK, i, m.addr, owner, 0, 0, 1};
-                        l1_cache_array[owner].msg_from_l2_or_l1_cache.push(mx);
+                        send_msg(1, owner, mx);
+                        // l1_cache_array[owner].msg_from_l2_or_l1_cache.push_back(mx);
                     }
                     else{
                         tdent[m.sender] = 1;
-                        tdent[m.receiver] = 0;
+                        tdent[owner] = 0;
                         m.receiver = owner;
-                        l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push(m);
+                        send_msg(1, owner, m);
+                        // if(m.addr == 34268577069ULL){
+                        // l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push_back(m);
                         l2_bank_array[i].update_dad(m.addr, L2_PDEX, tdent);
                     }
                 }
                 else if(dstate == L2_SHARED){
-                    // auto tdent = l2_bank_array[i].get_dentry(m.addr);
-                    // uint64 sum = 0;
-                    // for(uint64 ctr = 0; ctr<8; ctr++){
-                    //     if(tdent[ctr] == 1){
-                    //         struct msg mx = {MSG_INVAL, m.sender, m.addr, ctr, 0, 0, 0}; // sender = original sender
-                    //         tdent[ctr] = 0;
-                    //         sum++;
-                    //     }
+
+                    auto tdent = l2_bank_array[i].get_dentry(m.addr);
+                    // if(tdent[m.sender] == 1){
+                    //      struct msg mx = {MSG_NACK, i, m.addr, m.sender, 0, 0, 1}; // nack_is_write = 1, due to getX
+                    //     send_msg(1, m.sender, mx);
+                    //     // l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push_back(mx);
+                    //     return;
                     // }
-                    // tdent[m.sender] = 1;
-                    // l2_bank_array[i].update_dad(m.addr, L2_EM, tdent);
-                    // struct msg mx = {MSG_PUTX, i, m.addr, m.sender, sum, 0, 0};
-                    // l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push(mx);
+                    uint64 sum = 0;
+                    for(uint64 ctr = 0; ctr<8; ctr++){
+                        if(tdent[ctr] == 1 && ctr != m.sender){
+                            struct msg mx = {MSG_INVAL, m.sender, m.addr, ctr, 0, 0, 0}; // sender = original sender
+                            send_msg(1, ctr, mx);
+                            // l1_cache_array[ctr].msg_from_l2_or_l1_cache.push_back(mx);
+                            tdent[ctr] = 0;
+                            sum++;
+                        }
+                    }
+                    tdent[m.sender] = 1;
+                    l2_bank_array[i].update_dad(m.addr, L2_EM, tdent);
+                    struct msg mx = {MSG_PUTX, i, m.addr, m.sender, sum, 0, 0};
+                    send_msg(1, m.sender, mx);
+                    // l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push_back(mx);
                 }
             }
             // Check if the block is in L2 cache:
@@ -583,25 +704,30 @@ void process_l2_msg_inc(uint64 i, struct msg & m){
             else{
                 if(dstate == L2_PSH || dstate == L2_PDEX){
                     struct msg mx = {MSG_NACK, i, m.addr, m.sender, 0, 0, 1}; // nack_is_write = 1, due to Upgr
-                    l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push(mx);
+                    send_msg(1, m.sender, mx);
+                    // l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push_back(mx);
                 }
                 else if(dstate == L2_EM){
                     struct msg mx = {MSG_NACK, i, m.addr, m.sender, 0, 0, 1}; // nack_is_write = 1, due to Upgr
-                    l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push(mx);
+                    send_msg(1, m.sender, mx);
+                    // l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push_back(mx);
                 }
                 else if(dstate == L2_SHARED){
                     auto tdent = l2_bank_array[i].get_dentry(m.addr);
                     uint64 sum = 0;
                     for(uint64 ctr = 0; ctr<8; ctr++){
                         if(tdent[ctr] == 1 && ctr != m.sender){
-                            struct msg mx = {MSG_INVAL, m.sender, m.addr, ctr, 0, 0, 0}; // sender = original sender
+                            struct msg mx = {MSG_INVAL, m.sender, m.addr, ctr, 0, 0, 0, 1}; // sender = original sender
+                            send_msg(1, ctr, mx);
+                            // l1_cache_array[ctr].msg_from_l2_or_l1_cache.push_back(mx);
                             tdent[ctr] = 0;
                             sum++;
                         }
                     }
                     l2_bank_array[i].update_dad(m.addr, L2_EM, tdent);
                     struct msg mx = {MSG_PUTX, i, m.addr, m.sender, sum, 1, 0};
-                    l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push(mx);
+                    send_msg(1, m.sender, mx);
+                    // l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push_back(mx);
                 }
             }
             // Check if the block is in L2 cache:
@@ -635,7 +761,8 @@ void process_l2_msg_inc(uint64 i, struct msg & m){
                         for(uint64 y = 0; y<8; y++){
                             if(x.dentry[y] == 1){
                                 struct msg mx = {MSG_INVAL_L2, i, m.addr, y, 0, 0, 0};
-                                l1_cache_array[y].msg_from_l2_or_l1_cache.push(mx);
+                                send_msg(1, y, mx);
+                                // l1_cache_array[y].msg_from_l2_or_l1_cache.push_back(mx);
                             }
                         }
                         l2_bank_array[i].pending_buffer.erase(l2_bank_array[i].pending_buffer.begin() + ctr);
@@ -669,7 +796,8 @@ void process_l2_msg_inc(uint64 i, struct msg & m){
                 for(auto it = l2_bank_array[i].evict_buffer.begin(); it != l2_bank_array[i].evict_buffer.end(); it++){
                     if(it->tag == m.addr && it->dstate == L2_EM){
                         struct msg mx = {MSG_WB_ACK, i, m.addr, m.sender, 0, 0, 0};
-                        l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push(mx);
+                        send_msg(1, m.sender, mx);
+                        // l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push_back(mx);
                         l2_bank_array[i].evict_buffer.erase(it);
                         return;
                     }
@@ -679,12 +807,14 @@ void process_l2_msg_inc(uint64 i, struct msg & m){
                         for(uint64 ctr = 0; ctr<8; ctr++){
                             if(it->dentry[ctr] == 1 && ctr != m.sender){
                                 struct msg nack = {MSG_NACK, i, m.addr, ctr, 0, 0, (it->dstate == L2_PDEX)};
-                                l1_cache_array[ctr].msg_from_l2_or_l1_cache.push(nack);
+                                send_msg(1, ctr, nack);
+                                l1_cache_array[ctr].msg_from_l2_or_l1_cache.push_back(nack);
                                 break;
                             } 
                         }
                         struct msg mx = {MSG_WB_ACK, i, m.addr, m.sender, 0, 0, 0};
-                        l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push(mx);
+                        send_msg(1, m.sender, mx);
+                        // l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push_back(mx);
                         l2_bank_array[i].pending_buffer.erase(it);
                         return;
                     }
@@ -698,35 +828,40 @@ void process_l2_msg_inc(uint64 i, struct msg & m){
                     for(uint64 ctr = 0; ctr<8; ctr++){
                         if(tdent[ctr] == 1 && ctr != m.sender){
                             struct msg mx = {MSG_PUTX, i, m.addr, ctr, 0, 0, 0};
-                            l1_cache_array[ctr].msg_from_l2_or_l1_cache.push(mx);
+                            send_msg(1, ctr, mx);
+                            // l1_cache_array[ctr].msg_from_l2_or_l1_cache.push_back(mx);
                             tdent[m.sender] = 0; // not needed
                             break;
                         }
                     }
                     l2_bank_array[i].update_dad(m.addr, L2_EM, tdent);
                     struct msg mx = {MSG_WB_ACK, i, m.addr, m.sender, 0, 0, 0};
-                    l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push(mx);
+                    send_msg(1, m.sender, mx);
+                    // l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push_back(mx);
                 }
                 else if(dstate == L2_PSH){
                     auto tdent = l2_bank_array[i].get_dentry(m.addr);
                     for(uint64 ctr = 0; ctr<8; ctr++){
                         if(tdent[ctr] == 1 && ctr != m.sender){
                             struct msg mx = {MSG_PUTE, i, m.addr, ctr, 0, 0, 0};
-                            l1_cache_array[ctr].msg_from_l2_or_l1_cache.push(mx);
+                            send_msg(1, ctr, mx);
+                            // l1_cache_array[ctr].msg_from_l2_or_l1_cache.push_back(mx);
                             tdent[m.sender] = 0;
                             break;
                         }
                     }
                     l2_bank_array[i].update_dad(m.addr, L2_EM, tdent);
                     struct msg mx = {MSG_WB_ACK, i, m.addr, m.sender, 0, 0, 0};
-                    l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push(mx);
+                    send_msg(1, m.sender, mx);
+                    // l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push_back(mx);
                 }
                 else if(dstate == L2_EM){
                     auto tdent = l2_bank_array[i].get_dentry(m.addr);
                     tdent[m.sender] = 0;
                     l2_bank_array[i].update_dad(m.addr, L2_UNOWNED, tdent);
                     struct msg mx = {MSG_WB_ACK, i, m.addr, m.sender, 0, 0, 0};
-                    l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push(mx);
+                    send_msg(1, m.sender, mx);
+                    // l1_cache_array[m.sender].msg_from_l2_or_l1_cache.push_back(mx);
                 }
 
             }
@@ -757,7 +892,8 @@ void process_l2_msg_inc(uint64 i, struct msg & m){
                         for(uint64 ctr = 0; ctr<8; ctr++){
                             if(it->dentry[ctr] == 1 && ctr != m.sender){
                                 struct msg inval = {MSG_INVAL_L2, i, m.addr, ctr, 0, 0, 0};
-                                l1_cache_array[ctr].msg_from_l2_or_l1_cache.push(inval);
+                                send_msg(1, ctr, inval);
+                                // l1_cache_array[ctr].msg_from_l2_or_l1_cache.push_back(inval);
                                 break;
                             } 
                         }
@@ -801,17 +937,25 @@ int main()
     
     for(uint64 i=0;i<8;i++){
         string name = "trace";
-        traces[i].open(name + to_string(i) + ".out");
+        traces[i].open(name + to_string(i) + ".out", ios::binary);
 
     }
     string myline;
+    set<uint64> uni;
     for(uint64 i=0;i<8;i++){
         struct mem_access m; 
-        while(getline(traces[i], myline))
+        while(!traces[i].eof())
         {
-            auto cx = stringstream(myline);
-            cx >> m.global_ctr >> m.addr >> m.is_write;
+            traces[i].read((char*)&m.global_ctr, sizeof(uint64));
+            traces[i].read((char*)&m.addr, sizeof(uint64));
+            traces[i].read((char*)&m.is_write, sizeof(uint64));
+            if(traces[i].eof()){
+                break;
+            }
+            // auto cx = stringstream(myline);
+            // cx >> m.global_ctr >> m.addr >> m.is_write;
             m.addr >>= 6;
+            uni.insert(m.addr);
             l1_cache_array[i].req_from_processor.push(m);
         }
         cout << l1_cache_array[i].req_from_processor.size()<<"\n";
@@ -819,8 +963,13 @@ int main()
     Cycle = 1;
     long long cur_gid = -1;
     while(1){
-        if((Cycle % 10000) == 0){
+        if((Cycle % 100000) == 0){
             printf("%lu\n", Cycle);
+            for(uint64 i = 0; i<8; i++){
+                cout << l1_cache_array[i].outstanding_req_buffer.size() << " " << l1_cache_array[i].msg_from_l2_or_l1_cache.size() << " " << l1_cache_array[i].putx_buf.size()<< " " << l1_cache_array[i].snacks.size() << " ";
+                cout <<  l2_bank_array[i].msg_incoming.size() << " " << l2_bank_array[i].evict_buffer.size() << " " << l2_bank_array[i].pending_buffer.size() << " ";
+            }
+            cout << "\n";
         }
         uint64 flag = 0;
         vector<struct mem_access> temp_ma(8);
@@ -829,10 +978,12 @@ int main()
         // Pop queue and get data
         for(uint64 i = 0; i<8; i++){
             // Check for snacks
-            if( l1_cache_array[i].snacks.size() && l1_cache_array[i].snacks.front().first == Cycle){
-                temp_ma[i] = l1_cache_array[i].snacks.front().second;
-                l1_cache_array[i].snacks.pop();
+            if( l1_cache_array[i].snacks.size()){
                 flag = true;
+                if(l1_cache_array[i].snacks.front().first == Cycle){
+                    temp_ma[i] = l1_cache_array[i].snacks.front().second;
+                    l1_cache_array[i].snacks.pop();
+                }
             }
             else{
                 // Make sorting array for normal memory access
@@ -862,7 +1013,7 @@ int main()
         for(uint64 i= 0; i<8; i++){
             if(l1_cache_array[i].msg_from_l2_or_l1_cache.size()){
                 temp_msg_l1[i] = l1_cache_array[i].msg_from_l2_or_l1_cache.front();
-                l1_cache_array[i].msg_from_l2_or_l1_cache.pop();
+                l1_cache_array[i].msg_from_l2_or_l1_cache.pop_front();
                 flag = true;
             }
         }
@@ -915,6 +1066,21 @@ int main()
         //     cout << x.addr << " " << x.global_ctr <<" " << x.is_write << "\n";
         // }
         traces[i].close();
+    }
+    cout << "RESULTS:\n";
+    cout << "------------------------------\n";
+    cout << "Number of cycles: " << Cycle << "\n";
+    cout << "Number of unique block addresses: " << uni.size() << "\n";
+    cout << "Number of L1 Accesses: " << l1_accs << " L1 Misses: " << l1_misses << "\n";
+    cout << "Upgrade Misses: " << upgr_misses << "\n";
+    cout << "Number of L2 Misses: " << l2_misses << "\n";
+    cout << "L1 Message counts\n";
+    for(auto& x : l1_count){
+        cout << x.first << " " << x.second << "\n";
+    }
+    cout << "L2 Message counts\n";
+    for(auto& x : l2_count){
+        cout << x.first << " " << x.second << "\n";
     }
     return 0;
 }

@@ -25,8 +25,9 @@ using namespace std;
 
 uint64_t Cycle = 0;
 
-
 typedef unsigned long long uint64 ;
+
+uint64 l2_misses = 0;
 
 struct mem_access{
     uint64 global_ctr;
@@ -50,9 +51,15 @@ struct msg{
     uint64 inval_ack_exp; // With PUTX only
     uint64 is_upgr_reply; // With PUTX only
     uint64 nack_is_write; // With NACK only
+    uint64 upgr_miss;
 
     int home(){
         return addr & 7;
+    }
+
+    friend ostream& operator<<(ostream& o, struct msg & a){
+        o  << "NAME : " << a.msg_name << " SENDER: " << a.sender << " ADDR : " << a.addr << " RECEIVER : " << a.receiver << " FIElDS: " << a.inval_ack_exp << " " << a.is_upgr_reply << " " << a.nack_is_write;
+        return o;
     }
 };
 
@@ -85,14 +92,19 @@ struct l1_cache_block_cmp {
     }
 };
 
+struct putx_node {
+    struct msg putx;
+    struct msg pend;
+};
+
 struct l1_cache{
     queue<pair<uint64, struct mem_access>> snacks;
     queue<struct mem_access> req_from_processor;
-    queue<struct msg> msg_from_l2_or_l1_cache;
+    deque<struct msg> msg_from_l2_or_l1_cache;
     
 
     vector<struct mem_access> outstanding_req_buffer;
-    vector<struct msg> putx_buf;
+    vector<struct putx_node> putx_buf;
 
     vector<multiset<l1_cache_block,l1_cache_block_cmp>> all_cache_blocks;  
 
@@ -177,10 +189,6 @@ struct l1_cache{
                 }
             }
         }
-        if(ma.addr == 34356566963ULL){
-            // dev();
-            printf("SMgX: %lld, %lld, %lld, %d\n", ma.addr, ma.global_ctr, ma.is_write, ma.orb_name);
-        }
         if(id == -1){
             // printf("Kuch to gadbad hai daya xy\n");
             return;
@@ -231,7 +239,7 @@ struct l1_cache{
             }
         }
         if(!done){
-            printf("Update error\n");
+            cout << "Update error: " << addr <<"  " << state << "\n";
         }
     }
 
@@ -345,6 +353,7 @@ struct l2_bank{
     }
 
     struct l2_cache_block insert(uint64 addr, int l1id, uint64 dstate){
+        l2_misses++;
         // cout << "Insert " << addr << " "<< l1id <<  " " << dstate << "\n";
         struct l2_cache_block newb;
         auto set = addr % l2_bank_sets;
